@@ -154,6 +154,7 @@ function registerIpc(): void {
 }
 
 function createWindow(): void {
+  const prototypeQuery = process.argv.includes('--ui-prototype') ? '?prototype=ui' : '';
   mainWindow = new BrowserWindow({
     width: 1280,
     height: 800,
@@ -174,9 +175,9 @@ function createWindow(): void {
   mainWindow.webContents.on('will-navigate', (event) => event.preventDefault());
 
   if (MAIN_WINDOW_VITE_DEV_SERVER_URL) {
-    void mainWindow.loadURL(MAIN_WINDOW_VITE_DEV_SERVER_URL);
+    void mainWindow.loadURL(`${MAIN_WINDOW_VITE_DEV_SERVER_URL}${prototypeQuery}`);
   } else {
-    void mainWindow.loadFile(path.join(__dirname, `../renderer/${MAIN_WINDOW_VITE_NAME}/index.html`));
+    void mainWindow.loadFile(path.join(__dirname, `../renderer/${MAIN_WINDOW_VITE_NAME}/index.html`), prototypeQuery ? { query: { prototype: 'ui' } } : undefined);
   }
 }
 
