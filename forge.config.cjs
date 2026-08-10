@@ -1,7 +1,11 @@
 module.exports = {
   packagerConfig: {
     asar: true,
-    executableName: 'GameShelf'
+    executableName: 'GameShelf',
+    overwrite: true,
+    ...(process.env.GAMESHELF_ELECTRON_ZIP_DIR
+      ? { electronZipDir: process.env.GAMESHELF_ELECTRON_ZIP_DIR }
+      : {})
   },
   makers: [
     {
