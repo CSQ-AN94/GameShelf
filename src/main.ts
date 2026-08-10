@@ -1,11 +1,12 @@
 import { spawn } from 'node:child_process';
 import { copyFile, mkdir, readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
-import { app, BrowserWindow, dialog, ipcMain, type IpcMainInvokeEvent } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, Menu, shell, type IpcMainInvokeEvent } from 'electron';
 import started from 'electron-squirrel-startup';
 import { GameStore } from './game-store';
+import { analyzeExecutable } from './game-detection';
 import { parseLaunchArguments } from './launch';
-import type { Game, GameStatus, NewGameInput, PickedImage, ProfileInput, UserProfile } from './shared';
+import type { AppPreferences, Game, GameStatus, NewGameInput, PickedImage, ProfileInput, UserProfile } from './shared';
 
 declare const MAIN_WINDOW_VITE_DEV_SERVER_URL: string | undefined;
 declare const MAIN_WINDOW_VITE_NAME: string;
@@ -95,6 +96,14 @@ async function hydrateProfile(): Promise<UserProfile> {
   };
 }
 
+function readPreferences(): AppPreferences {
+  const preferenceStore = requireStore();
+  return {
+    theme: preferenceStore.getSetting('appearance.theme') === 'light' ? 'light' : 'dark',
+    safeView: preferenceStore.getSetting('privacy.safeView') === 'true'
+  };
+}
+
 function registerIpc(): void {
   ipcMain.handle('games:list', async (event) => {
     assertTrusted(event);
@@ -132,11 +141,19 @@ function registerIpc(): void {
     return { path: selectedPath, dataUrl };
   });
 
+  ipcMain.handle('games:analyze-executable', async (event, executablePath: unknown) => {
+    assertTrusted(event);
+    if (typeof executablePath !== 'string') throw new Error('请选择启动文件');
+    await validateExecutable(executablePath);
+    return analyzeExecutable(executablePath);
+  });
+
   ipcMain.handle('games:add', async (event, input: NewGameInput) => {
     assertTrusted(event);
     if (!input || typeof input.title !== 'string' || !input.title.trim()) throw new Error('游戏名称不能为空');
     if (input.title.length > 200) throw new Error('游戏名称过长');
     if (!gameTypes.has(input.type)) throw new Error('无效的游戏类型');
+    if (input.category != null && (typeof input.category !== 'string' || input.category.trim().length > 60)) throw new Error('无效的游戏分类');
     if (!contentRatings.has(input.contentRating)) throw new Error('无效的内容分级');
     if (input.status && !gameStatuses.has(input.status)) throw new Error('无效的游玩状态');
     if (typeof input.executablePath !== 'string') throw new Error('请选择启动文件');
@@ -158,6 +175,13 @@ function registerIpc(): void {
     if (typeof id !== 'string' || !gameStatuses.has(status as string)) throw new Error('无效的游玩状态');
     if (!requireStore().getGame(id)) throw new Error('找不到这个游戏');
     return hydrateGame(requireStore().setStatus(id, status as GameStatus));
+  });
+
+  ipcMain.handle('games:update-category', async (event, id: unknown, category: unknown) => {
+    assertTrusted(event);
+    if (typeof id !== 'string' || typeof category !== 'string' || !category.trim() || category.trim().length > 60) throw new Error('无效的游戏分类');
+    if (!requireStore().getGame(id)) throw new Error('找不到这个游戏');
+    return hydrateGame(requireStore().setCategory(id, category));
   });
 
   ipcMain.handle('games:launch', async (event, id: unknown) => {
@@ -219,6 +243,28 @@ function registerIpc(): void {
     }
     return hydrateProfile();
   });
+
+  ipcMain.handle('preferences:get', (event) => {
+    assertTrusted(event);
+    return readPreferences();
+  });
+
+  ipcMain.handle('preferences:save', (event, preferences: AppPreferences) => {
+    assertTrusted(event);
+    if (!preferences || !['dark', 'light'].includes(preferences.theme) || typeof preferences.safeView !== 'boolean') throw new Error('无效的应用设置');
+    const preferenceStore = requireStore();
+    preferenceStore.setSetting('appearance.theme', preferences.theme);
+    preferenceStore.setSetting('privacy.safeView', String(preferences.safeView));
+    return readPreferences();
+  });
+
+  ipcMain.handle('app:open-data-directory', async (event) => {
+    assertTrusted(event);
+    const dataDirectory = app.getPath('userData');
+    const error = await shell.openPath(dataDirectory);
+    if (error) throw new Error(error);
+    return dataDirectory;
+  });
 }
 
 function createWindow(): void {
@@ -228,6 +274,7 @@ function createWindow(): void {
     minWidth: 960,
     minHeight: 640,
     backgroundColor: '#0d1117',
+    autoHideMenuBar: true,
     show: false,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
@@ -236,6 +283,7 @@ function createWindow(): void {
       sandbox: true
     }
   });
+  mainWindow.setMenuBarVisibility(false);
 
   mainWindow.once('ready-to-show', () => mainWindow?.show());
   mainWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
@@ -250,6 +298,7 @@ function createWindow(): void {
 
 app.whenReady().then(() => {
   app.setAppUserModelId('com.squirrel.GameShelf.GameShelf');
+  Menu.setApplicationMenu(null);
   store = new GameStore(path.join(app.getPath('userData'), 'gameshelf.sqlite'));
   registerIpc();
   createWindow();

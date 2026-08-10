@@ -6,6 +6,7 @@ export interface Game {
   id: string;
   title: string;
   type: GameType;
+  category: string;
   contentRating: ContentRating;
   executablePath: string;
   workingDirectory: string;
@@ -30,6 +31,7 @@ export interface Game {
 export interface NewGameInput {
   title: string;
   type: GameType;
+  category?: string;
   contentRating: ContentRating;
   executablePath: string;
   launchArguments?: string;
@@ -62,12 +64,31 @@ export interface ProfileInput {
   avatarSourcePath?: string | null;
 }
 
+export type ThemeMode = 'dark' | 'light';
+
+export interface AppPreferences {
+  theme: ThemeMode;
+  safeView: boolean;
+}
+
+export interface GameSetupAnalysis {
+  engine: string | null;
+  suggestedType: GameType;
+  suggestedCategory: string;
+  alternativeExecutables: string[];
+  modDirectories: string[];
+  saveDirectories: string[];
+  patchDirectories: string[];
+}
+
 export interface GameShelfApi {
   listGames: () => Promise<Game[]>;
   getGame: (id: string) => Promise<Game | null>;
   addGame: (input: NewGameInput) => Promise<Game>;
   updateGameStatus: (id: string, status: GameStatus) => Promise<Game>;
+  updateGameCategory: (id: string, category: string) => Promise<Game>;
   pickExecutable: () => Promise<string | null>;
+  analyzeExecutable: (executablePath: string) => Promise<GameSetupAnalysis>;
   pickCover: () => Promise<PickedImage | null>;
   launchGame: (id: string) => Promise<void>;
   listCollections: () => Promise<GameCollection[]>;
@@ -75,4 +96,7 @@ export interface GameShelfApi {
   setGameCollections: (gameId: string, collectionIds: string[]) => Promise<void>;
   getProfile: () => Promise<UserProfile>;
   saveProfile: (input: ProfileInput) => Promise<UserProfile>;
+  getPreferences: () => Promise<AppPreferences>;
+  savePreferences: (preferences: AppPreferences) => Promise<AppPreferences>;
+  openDataDirectory: () => Promise<string>;
 }

@@ -6,6 +6,7 @@ type GameRow = {
   id: string;
   title: string;
   type: Game['type'];
+  category: string;
   content_rating: Game['contentRating'];
   executable_path: string;
   working_directory: string;
@@ -31,6 +32,7 @@ function rowToGame(row: GameRow): Game {
     id: row.id,
     title: row.title,
     type: row.type,
+    category: row.category,
     contentRating: row.content_rating,
     executablePath: row.executable_path,
     workingDirectory: row.working_directory,
@@ -64,6 +66,7 @@ export class GameStore {
         id TEXT PRIMARY KEY,
         title TEXT NOT NULL CHECK(length(trim(title)) > 0),
         type TEXT NOT NULL,
+        category TEXT NOT NULL DEFAULT '',
         content_rating TEXT NOT NULL,
         executable_path TEXT NOT NULL,
         working_directory TEXT NOT NULL,
@@ -113,6 +116,18 @@ export class GameStore {
     if (!gameColumns.some((column) => column.name === 'completed_at')) {
       this.database.exec('ALTER TABLE games ADD COLUMN completed_at TEXT');
     }
+    if (!gameColumns.some((column) => column.name === 'category')) {
+      this.database.exec("ALTER TABLE games ADD COLUMN category TEXT NOT NULL DEFAULT ''");
+      this.database.exec(`
+        UPDATE games SET category = CASE type
+          WHEN 'visual_novel' THEN 'Galgame'
+          WHEN 'rpg' THEN 'RPG'
+          WHEN 'simulation' THEN '模拟经营'
+          WHEN 'action' THEN '动作游戏'
+          ELSE '其他游戏'
+        END
+      `);
+    }
   }
 
   listGames(): Game[] {
@@ -133,14 +148,15 @@ export class GameStore {
     this.database
       .prepare(`
         INSERT INTO games (
-          id, title, type, content_rating, executable_path, working_directory,
+          id, title, type, category, content_rating, executable_path, working_directory,
           launch_arguments, developer, description, status, completed_at, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `)
       .run(
         id,
         input.title.trim(),
         input.type,
+        input.category?.trim() || ({ visual_novel: 'Galgame', rpg: 'RPG', simulation: '模拟经营', action: '动作游戏', other: '其他游戏' } as const)[input.type],
         input.contentRating,
         input.executablePath,
         input.workingDirectory,
@@ -173,6 +189,11 @@ export class GameStore {
           updated_at = ?
       WHERE id = ?
     `).run(status, status, now, now, id);
+    return this.getGame(id)!;
+  }
+
+  setCategory(id: string, category: string): Game {
+    this.database.prepare('UPDATE games SET category = ?, updated_at = ? WHERE id = ?').run(category.trim(), new Date().toISOString(), id);
     return this.getGame(id)!;
   }
 

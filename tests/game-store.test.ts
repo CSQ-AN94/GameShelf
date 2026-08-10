@@ -44,11 +44,13 @@ describe('GameStore', () => {
     const collection = store.createCollection('系列作品');
 
     const completed = store.setStatus(game.id, 'completed');
+    const categorized = store.setCategory(game.id, '型月系列');
     store.setGameCollections(game.id, [collection.id]);
     store.setSetting('profile.name', 'Kevin');
 
     assert.equal(completed.status, 'completed');
     assert.ok(completed.completedAt);
+    assert.equal(categorized.category, '型月系列');
     assert.deepEqual(store.listCollections()[0]?.gameIds, [game.id]);
     assert.equal(store.getSetting('profile.name'), 'Kevin');
     store.close();
