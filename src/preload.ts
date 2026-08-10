@@ -5,6 +5,7 @@ const api: GameShelfApi = {
   listGames: () => ipcRenderer.invoke('games:list'),
   getGame: (id) => ipcRenderer.invoke('games:get', id),
   addGame: (input: NewGameInput) => ipcRenderer.invoke('games:add', input),
+  removeGame: (id) => ipcRenderer.invoke('games:remove', id),
   updateGameStatus: (id, status) => ipcRenderer.invoke('games:update-status', id, status),
   updateGameCategory: (id, category) => ipcRenderer.invoke('games:update-category', id, category),
   updateGameSettings: (id, input: GameSettingsInput) => ipcRenderer.invoke('games:update-settings', id, input),

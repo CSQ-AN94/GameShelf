@@ -2,6 +2,7 @@ module.exports = {
   packagerConfig: {
     asar: true,
     executableName: 'GameShelf',
+    icon: 'assets/app-icon.ico',
     overwrite: true,
     ...(process.env.GAMESHELF_ELECTRON_ZIP_DIR
       ? { electronZipDir: process.env.GAMESHELF_ELECTRON_ZIP_DIR }

@@ -122,6 +122,7 @@ export interface GameShelfApi {
   listGames: () => Promise<Game[]>;
   getGame: (id: string) => Promise<Game | null>;
   addGame: (input: NewGameInput) => Promise<Game>;
+  removeGame: (id: string) => Promise<void>;
   updateGameStatus: (id: string, status: GameStatus) => Promise<Game>;
   updateGameCategory: (id: string, category: string) => Promise<Game>;
   updateGameSettings: (id: string, input: GameSettingsInput) => Promise<Game>;

@@ -1,5 +1,6 @@
 import { spawn } from 'node:child_process';
-import { copyFile, mkdir, readFile, stat } from 'node:fs/promises';
+import { mkdirSync } from 'node:fs';
+import { copyFile, mkdir, readFile, stat, unlink } from 'node:fs/promises';
 import path from 'node:path';
 import { app, BrowserWindow, dialog, ipcMain, Menu, shell, type IpcMainInvokeEvent } from 'electron';
 import started from 'electron-squirrel-startup';
@@ -12,6 +13,15 @@ declare const MAIN_WINDOW_VITE_DEV_SERVER_URL: string | undefined;
 declare const MAIN_WINDOW_VITE_NAME: string;
 
 if (started) app.quit();
+
+const configuredDataDirectory = process.env.GAMESHELF_DATA_DIR?.trim();
+if (app.isPackaged || configuredDataDirectory) {
+  const dataDirectory = configuredDataDirectory
+    ? path.resolve(configuredDataDirectory)
+    : path.join(path.dirname(process.execPath), 'data');
+  mkdirSync(dataDirectory, { recursive: true });
+  app.setPath('userData', dataDirectory);
+}
 
 let mainWindow: BrowserWindow | null = null;
 let store: GameStore | null = null;
@@ -90,6 +100,14 @@ async function copyProfileAvatar(sourcePath: string): Promise<string> {
   const destination = path.join(destinationDirectory, `avatar${extension}`);
   await copyFile(sourcePath, destination);
   return destination;
+}
+
+async function removeManagedArtwork(gameId: string, filePath: string | null, directoryName: 'covers' | 'backgrounds'): Promise<void> {
+  if (!filePath) return;
+  const managedDirectory = path.resolve(app.getPath('userData'), directoryName);
+  const resolvedPath = path.resolve(filePath);
+  if (path.dirname(resolvedPath) !== managedDirectory || !path.basename(resolvedPath).startsWith(`${gameId}.`)) return;
+  await unlink(resolvedPath).catch(() => undefined);
 }
 
 async function hydrateProfile(): Promise<UserProfile> {
@@ -191,6 +209,18 @@ function registerIpc(): void {
       game = requireStore().setCoverPath(game.id, coverPath);
     }
     return hydrateGame(game);
+  });
+
+  ipcMain.handle('games:remove', async (event, id: unknown) => {
+    assertTrusted(event);
+    if (typeof id !== 'string') throw new Error('无效的游戏');
+    const game = requireStore().getGame(id);
+    if (!game) throw new Error('找不到这个游戏');
+    if (!requireStore().removeGame(id)) throw new Error('移出游戏库失败');
+    await Promise.all([
+      removeManagedArtwork(id, game.coverPath, 'covers'),
+      removeManagedArtwork(id, game.backgroundPath, 'backgrounds')
+    ]);
   });
 
   ipcMain.handle('games:update-status', async (event, id: unknown, status: unknown) => {
@@ -342,6 +372,7 @@ function createWindow(): void {
     height: 800,
     minWidth: 960,
     minHeight: 640,
+    icon: path.join(app.getAppPath(), 'assets', 'app-icon.png'),
     backgroundColor: '#0d1117',
     autoHideMenuBar: true,
     show: false,

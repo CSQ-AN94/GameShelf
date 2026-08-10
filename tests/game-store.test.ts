@@ -71,4 +71,27 @@ describe('GameStore', () => {
     assert.equal(store.getSetting('profile.name'), 'Kevin');
     store.close();
   });
+
+  it('removes only the selected library record and its related data', () => {
+    const store = new GameStore(':memory:');
+    const removed = store.createGame({
+      title: 'Remove Me',
+      type: 'other',
+      contentRating: 'general',
+      executablePath: 'C:\\Games\\Remove\\game.exe',
+      workingDirectory: 'C:\\Games\\Remove'
+    });
+    const kept = store.createGame({
+      title: 'Keep Me',
+      type: 'other',
+      contentRating: 'general',
+      executablePath: 'C:\\Games\\Keep\\game.exe',
+      workingDirectory: 'C:\\Games\\Keep'
+    });
+
+    assert.equal(store.removeGame(removed.id), true);
+    assert.equal(store.getGame(removed.id), null);
+    assert.equal(store.getGame(kept.id)?.title, 'Keep Me');
+    store.close();
+  });
 });

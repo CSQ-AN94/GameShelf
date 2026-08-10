@@ -3,7 +3,8 @@ import type { AppPreferences, ContentRating, Game, GameCollection, GameSetupAnal
 import { alternateTitle, displayTitle } from '../title-display';
 
 type LibraryFilter = 'home' | 'settings' | 'all' | 'recent' | 'wishlist' | GameStatus | `category:${string}` | `collection:${string}`;
-type IconName = 'home' | 'settings' | 'library' | 'clock' | 'play' | 'check' | 'search' | 'shield' | 'plus' | 'book' | 'more' | 'folder' | 'list' | 'sidebar';
+type SidebarSectionName = 'library' | 'categories' | 'collections';
+type IconName = 'home' | 'settings' | 'library' | 'clock' | 'play' | 'check' | 'search' | 'shield' | 'plus' | 'book' | 'more' | 'folder' | 'list' | 'sidebar' | 'chevron' | 'sparkles' | 'sword' | 'buildings' | 'bolt' | 'gamepad' | 'trash';
 
 const iconPaths: Record<IconName, string> = {
   home: 'M3 10.8 12 3l9 7.8M5.5 9.7V21h13V9.7M9.5 21v-7h5v7',
@@ -19,7 +20,22 @@ const iconPaths: Record<IconName, string> = {
   more: 'M5 12h.01M12 12h.01M19 12h.01',
   folder: 'M3 6h7l2 2h9v11H3Z',
   list: 'M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01',
-  sidebar: 'M5.5 4.5h13A1.5 1.5 0 0 1 20 6v12a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 18V6a1.5 1.5 0 0 1 1.5-1.5ZM9 4.5v15'
+  sidebar: 'M5.5 4.5h13A1.5 1.5 0 0 1 20 6v12a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 18V6a1.5 1.5 0 0 1 1.5-1.5ZM9 4.5v15',
+  chevron: 'm8 10 4 4 4-4',
+  sparkles: 'M12 3l1.5 5.5L19 10l-5.5 1.5L12 17l-1.5-5.5L5 10l5.5-1.5L12 3Zm7 12 .7 2.3L22 18l-2.3.7L19 21l-.7-2.3L16 18l2.3-.7L19 15Z',
+  sword: 'm14 4 6 0v6L10 20l-6-6L14 4Zm-7 13-3 3',
+  buildings: 'M4 20V8h7v12M13 20V4h7v16M7 11h1M7 14h1M16 8h1M16 11h1M16 14h1M3 20h18',
+  bolt: 'm13 2-8 12h6l-1 8 9-13h-6V2Z',
+  gamepad: 'M7 8h10a4 4 0 0 1 3.8 5.2l-1.1 3.4a2 2 0 0 1-3.2 1L14 15h-4l-2.5 2.6a2 2 0 0 1-3.2-1l-1.1-3.4A4 4 0 0 1 7 8Zm0 3v4M5 13h4M16.5 12h.01M18.5 14h.01',
+  trash: 'M4 7h16M9 3h6l1 4M7 7l1 14h8l1-14M10 11v6M14 11v6'
+};
+
+const typeIcons: Record<GameType, IconName> = {
+  visual_novel: 'sparkles',
+  rpg: 'sword',
+  simulation: 'buildings',
+  action: 'bolt',
+  other: 'gamepad'
 };
 
 const typeLabels: Record<GameType, string> = {
@@ -53,7 +69,7 @@ const statusLabels: Record<GameStatus, string> = {
 
 function Icon({ name, fill = false }: { name: IconName; fill?: boolean }) {
   return (
-    <svg className="app-icon" viewBox="0 0 24 24" aria-hidden="true">
+    <svg className={`app-icon icon-${name}`} viewBox="0 0 24 24" aria-hidden="true">
       <path d={iconPaths[name]} fill={fill ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
@@ -408,7 +424,7 @@ function CategoryDialog({ game, titleMode, suggestions, onClose, onSaved }: { ga
 
 type LaunchProfileDraft = LaunchProfile & { isNew?: boolean };
 
-function GameSettingsDialog({ game, titleMode, onClose, onChanged }: { game: Game; titleMode: TitleDisplayMode; onClose: () => void; onChanged: (game: Game) => void }) {
+function GameSettingsDialog({ game, titleMode, onClose, onChanged, onRemoved }: { game: Game; titleMode: TitleDisplayMode; onClose: () => void; onChanged: (game: Game) => void; onRemoved: (game: Game) => void }) {
   const [title, setTitle] = useState(game.title);
   const [chineseTitle, setChineseTitle] = useState(game.chineseTitle);
   const [wishlist, setWishlist] = useState(game.wishlist);
@@ -422,6 +438,8 @@ function GameSettingsDialog({ game, titleMode, onClose, onChanged }: { game: Gam
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState('');
+  const [confirmingRemoval, setConfirmingRemoval] = useState(false);
+  const [removing, setRemoving] = useState(false);
 
   useEffect(() => setProfiles(game.launchProfiles), [game.launchProfiles]);
 
@@ -454,6 +472,18 @@ function GameSettingsDialog({ game, titleMode, onClose, onChanged }: { game: Gam
     setError('');
     try { await window.gameshelf.openGameDirectory(game.id); }
     catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); }
+  }
+
+  async function removeFromLibrary() {
+    setError('');
+    setRemoving(true);
+    try {
+      await window.gameshelf.removeGame(game.id);
+      onRemoved(game);
+    } catch (reason) {
+      setConfirmingRemoval(false);
+      setError(reason instanceof Error ? reason.message : String(reason));
+    } finally { setRemoving(false); }
   }
 
   async function saveGeneral(event: FormEvent) {
@@ -524,8 +554,8 @@ function GameSettingsDialog({ game, titleMode, onClose, onChanged }: { game: Gam
             <label className="setting-toggle-row"><span><strong>加入欲玩清单</strong><small>在侧栏的欲玩清单中显示</small></span><input type="checkbox" checked={wishlist} onChange={(event) => { setWishlist(event.target.checked); setSaved(false); }} /><i /></label>
             <label className="setting-toggle-row"><span><strong>安全视图中隐藏</strong><small>开启安全视图时隐藏标题、图片和记录</small></span><input type="checkbox" checked={hideInSafeView} onChange={(event) => { setHideInSafeView(event.target.checked); setSaved(false); }} /><i /></label>
           </div></section>
-          <section className="artwork-note"><Icon name="book" /><div><strong>两套图片，各司其职</strong><p>竖版封面用于书库卡片；横向背景用于主页主视觉和游戏详情。点击上方图片即可随时替换。</p></div></section>
           <section className="game-location"><Icon name="folder" /><div><strong>游戏所在文件夹</strong><p title={game.workingDirectory}>{game.workingDirectory}</p></div><button type="button" className="settings-action" onClick={() => void openGameDirectory()}>打开文件夹</button></section>
+          <section className="settings-danger"><Icon name="trash" /><div><strong>移出游戏库</strong><p>只移除 GameShelf 中的资料，不会删除游戏本体或存档。</p></div><button type="button" className="danger-button" onClick={() => setConfirmingRemoval(true)}>移出游戏库</button></section>
         </form> : <section className="launch-settings"><header><div><h3>启动项</h3><p>为原版、汉化版或补丁版分别选择 exe；默认项用于“开始游玩”。</p></div><button className="settings-action" onClick={addProfile}><Icon name="plus" />添加启动项</button></header>
           <div className="launch-editors">{profiles.map((profile) => <div className="launch-editor" key={profile.id}>
             <div className="launch-editor-title"><input value={profile.name} onChange={(event) => patchProfile(profile.id, { name: event.target.value })} /><span>{profile.isDefault ? '默认' : ''}</span></div>
@@ -537,6 +567,7 @@ function GameSettingsDialog({ game, titleMode, onClose, onChanged }: { game: Gam
         {error && <p className="form-error">{error}</p>}
       </div>
       <footer className="modal-footer settings-footer"><button className="secondary-button" onClick={onClose}>关闭</button>{pane === 'overview' && <button className={saved ? 'primary-button saved' : 'primary-button'} type="submit" form="game-general-form" disabled={saving}>{saving ? '正在保存…' : saved ? '已保存' : '保存更改'}</button>}</footer>
+      {confirmingRemoval && <div className="confirm-layer"><section className="confirm-card" role="alertdialog" aria-modal="true" aria-labelledby="remove-game-title"><span className="confirm-icon"><Icon name="trash" /></span><h3 id="remove-game-title">将“{headingTitle}”移出游戏库？</h3><p>游玩记录、分类和启动项会从 GameShelf 中移除。游戏文件夹及其中的存档不会受到影响。</p><small title={game.workingDirectory}>{game.workingDirectory}</small><div><button className="secondary-button" onClick={() => setConfirmingRemoval(false)} disabled={removing}>取消</button><button className="danger-button solid" onClick={() => void removeFromLibrary()} disabled={removing}>{removing ? '正在移出…' : '确认移出'}</button></div></section></div>}
     </section></div>
   );
 }
@@ -568,6 +599,7 @@ export function App() {
   const [managingCollectionsFor, setManagingCollectionsFor] = useState<string | null>(null);
   const [editingSettingsFor, setEditingSettingsFor] = useState<string | null>(null);
   const [message, setMessage] = useState('');
+  const [collapsedSections, setCollapsedSections] = useState<Record<SidebarSectionName, boolean>>({ library: false, categories: false, collections: false });
 
   const refresh = useCallback(async () => {
     try {
@@ -620,6 +652,10 @@ export function App() {
   const membershipGame = games.find((game) => game.id === managingCollectionsFor) ?? null;
   const settingsGame = games.find((game) => game.id === editingSettingsFor) ?? null;
   const categories = useMemo(() => [...new Set(games.map((game) => game.category).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'zh-CN')), [games]);
+  const categoryIcons = useMemo(() => new Map(categories.map((category) => {
+    const types = [...new Set(games.filter((game) => game.category === category).map((game) => game.type))];
+    return [category, types.length === 1 ? typeIcons[types[0]!] : 'book'] as const;
+  })), [categories, games]);
 
   async function launch(game: Game, profileId?: string) {
     try {
@@ -688,6 +724,18 @@ export function App() {
     try { await window.gameshelf.openDataDirectory(); } catch (reason) { setMessage(reason instanceof Error ? reason.message : String(reason)); }
   }
 
+  function toggleSidebarSection(section: SidebarSectionName) {
+    setCollapsedSections((current) => ({ ...current, [section]: !current[section] }));
+  }
+
+  function removeGameFromView(game: Game) {
+    setGames((current) => current.filter((item) => item.id !== game.id));
+    setCollections((current) => current.map((collection) => ({ ...collection, gameIds: collection.gameIds.filter((id) => id !== game.id) })));
+    setSelectedId(null);
+    setEditingSettingsFor(null);
+    setMessage(`已将 ${displayTitle(game, preferences.titleDisplayMode)} 移出游戏库，游戏文件未删除`);
+  }
+
   function navItem(value: LibraryFilter, icon: IconName, label: string) {
     return <button className={filter === value && !selected ? 'nav-item active' : 'nav-item'} title={label} onClick={() => { setFilter(value); setSelectedId(null); }}><Icon name={icon} />{label}</button>;
   }
@@ -700,13 +748,9 @@ export function App() {
         <div className="sidebar-top"><label className="sidebar-search"><Icon name="search" /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="搜索游戏" /></label><button className="sidebar-collapse" title={preferences.sidebarCollapsed ? '展开侧栏' : '收起侧栏'} aria-label={preferences.sidebarCollapsed ? '展开侧栏' : '收起侧栏'} onClick={() => void savePreferences({ ...preferences, sidebarCollapsed: !preferences.sidebarCollapsed })}><Icon name="sidebar" /></button></div>
         <nav className="sidebar-nav">
           {navItem('home', 'home', '主页')}
-          <p className="nav-heading">游戏库</p>
-          {navItem('all', 'library', '全部游戏')}
-          {navItem('completed', 'check', '已玩完')}
-          {navItem('wishlist', 'clock', '欲玩清单')}
-          {categories.length > 0 && <><p className="nav-heading">分类</p>{categories.map((category) => navItem(`category:${category}`, 'book', category))}</>}
-          <div className="collection-heading"><p className="nav-heading">我的合集</p><button onClick={() => setCreatingCollection(true)} aria-label="新建合集"><Icon name="plus" /></button></div>
-          <div className="collection-nav">{collections.map((collection) => navItem(`collection:${collection.id}`, 'list', collection.name))}{collections.length === 0 && <span className="sidebar-empty">还没有自定义合集</span>}</div>
+          <section className="nav-section"><button className={collapsedSections.library ? 'nav-section-heading collapsed' : 'nav-section-heading'} onClick={() => toggleSidebarSection('library')} aria-expanded={!collapsedSections.library}><strong>游戏库</strong><Icon name="chevron" /></button><div className="nav-section-content" hidden={collapsedSections.library}>{navItem('all', 'library', '全部游戏')}{navItem('completed', 'check', '已玩完')}{navItem('wishlist', 'clock', '欲玩清单')}</div></section>
+          {categories.length > 0 && <section className="nav-section"><button className={collapsedSections.categories ? 'nav-section-heading collapsed' : 'nav-section-heading'} onClick={() => toggleSidebarSection('categories')} aria-expanded={!collapsedSections.categories}><strong>分类</strong><Icon name="chevron" /></button><div className="nav-section-content" hidden={collapsedSections.categories}>{categories.map((category) => navItem(`category:${category}`, categoryIcons.get(category) ?? 'book', category))}</div></section>}
+          <section className="nav-section"><div className="nav-section-heading-row"><button className={collapsedSections.collections ? 'nav-section-heading collapsed' : 'nav-section-heading'} onClick={() => toggleSidebarSection('collections')} aria-expanded={!collapsedSections.collections}><strong>我的合集</strong><Icon name="chevron" /></button><button className="section-add" onClick={() => setCreatingCollection(true)} aria-label="新建合集"><Icon name="plus" /></button></div><div className="nav-section-content collection-nav" hidden={collapsedSections.collections}>{collections.map((collection) => navItem(`collection:${collection.id}`, 'list', collection.name))}{collections.length === 0 && <span className="sidebar-empty">还没有自定义合集</span>}</div></section>
         </nav>
         <div className="sidebar-bottom">
           {navItem('settings', 'settings', '设置')}
@@ -726,7 +770,7 @@ export function App() {
       {editingProfile && <ProfileDialog profile={profile} onClose={() => setEditingProfile(false)} onSaved={(nextProfile) => { setProfile(nextProfile); setEditingProfile(false); }} />}
       {categoryGame && <CategoryDialog game={categoryGame} titleMode={preferences.titleDisplayMode} suggestions={categories} onClose={() => setEditingCategoryFor(null)} onSaved={(category) => void updateCategory(categoryGame, category)} />}
       {membershipGame && <CollectionMembershipDialog game={membershipGame} titleMode={preferences.titleDisplayMode} collections={collections} onClose={() => setManagingCollectionsFor(null)} onSaved={(ids) => void saveMembership(membershipGame, ids)} />}
-      {settingsGame && <GameSettingsDialog game={settingsGame} titleMode={preferences.titleDisplayMode} onClose={() => setEditingSettingsFor(null)} onChanged={replaceGame} />}
+      {settingsGame && <GameSettingsDialog game={settingsGame} titleMode={preferences.titleDisplayMode} onClose={() => setEditingSettingsFor(null)} onChanged={replaceGame} onRemoved={removeGameFromView} />}
       {message && <div className="toast">{message}</div>}
     </div>
   );

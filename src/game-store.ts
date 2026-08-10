@@ -206,6 +206,10 @@ export class GameStore {
     return row ? rowToGame(row, this.listLaunchProfiles(row.id)) : null;
   }
 
+  removeGame(id: string): boolean {
+    return this.database.prepare('DELETE FROM games WHERE id = ?').run(id).changes > 0;
+  }
+
   createGame(input: NewGameInput & { workingDirectory: string }): Game {
     const id = randomUUID();
     const now = new Date().toISOString();
