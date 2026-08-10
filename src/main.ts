@@ -106,6 +106,7 @@ function readPreferences(): AppPreferences {
   const preferenceStore = requireStore();
   return {
     theme: preferenceStore.getSetting('appearance.theme') === 'light' ? 'light' : 'dark',
+    titleDisplayMode: preferenceStore.getSetting('appearance.titleDisplayMode') === 'chinese' ? 'chinese' : 'original',
     safeView: preferenceStore.getSetting('privacy.safeView') === 'true',
     sidebarCollapsed: preferenceStore.getSetting('appearance.sidebarCollapsed') === 'true'
   };
@@ -173,6 +174,7 @@ function registerIpc(): void {
     assertTrusted(event);
     if (!input || typeof input.title !== 'string' || !input.title.trim()) throw new Error('游戏名称不能为空');
     if (input.title.length > 200) throw new Error('游戏名称过长');
+    if (input.chineseTitle != null && (typeof input.chineseTitle !== 'string' || input.chineseTitle.trim().length > 200)) throw new Error('中文名称无效');
     if (!gameTypes.has(input.type)) throw new Error('无效的游戏类型');
     if (input.category != null && (typeof input.category !== 'string' || input.category.trim().length > 60)) throw new Error('无效的游戏分类');
     if (!contentRatings.has(input.contentRating)) throw new Error('无效的内容分级');
@@ -207,7 +209,8 @@ function registerIpc(): void {
 
   ipcMain.handle('games:update-settings', async (event, id: unknown, input: GameSettingsInput) => {
     assertTrusted(event);
-    if (typeof id !== 'string' || !input || typeof input.title !== 'string' || !input.title.trim() || input.title.trim().length > 200) throw new Error('游戏名称无效');
+    if (typeof id !== 'string' || !input || typeof input.title !== 'string' || !input.title.trim() || input.title.trim().length > 200) throw new Error('游戏原名无效');
+    if (typeof input.chineseTitle !== 'string' || input.chineseTitle.trim().length > 200) throw new Error('中文名称无效');
     if (typeof input.wishlist !== 'boolean' || typeof input.hideInSafeView !== 'boolean') throw new Error('游戏设置无效');
     if (input.coverSourcePath != null && (typeof input.coverSourcePath !== 'string' || !path.isAbsolute(input.coverSourcePath))) throw new Error('封面路径无效');
     if (input.backgroundSourcePath != null && (typeof input.backgroundSourcePath !== 'string' || !path.isAbsolute(input.backgroundSourcePath))) throw new Error('背景图路径无效');
@@ -257,6 +260,18 @@ function registerIpc(): void {
     });
   });
 
+  ipcMain.handle('games:open-directory', async (event, id: unknown) => {
+    assertTrusted(event);
+    if (typeof id !== 'string') throw new Error('无效的游戏');
+    const game = requireStore().getGame(id);
+    if (!game) throw new Error('找不到这个游戏');
+    const details = await stat(game.workingDirectory);
+    if (!details.isDirectory()) throw new Error('游戏文件夹不存在');
+    const error = await shell.openPath(game.workingDirectory);
+    if (error) throw new Error(error);
+    return game.workingDirectory;
+  });
+
   ipcMain.handle('collections:list', (event) => {
     assertTrusted(event);
     return requireStore().listCollections();
@@ -303,9 +318,10 @@ function registerIpc(): void {
 
   ipcMain.handle('preferences:save', (event, preferences: AppPreferences) => {
     assertTrusted(event);
-    if (!preferences || !['dark', 'light'].includes(preferences.theme) || typeof preferences.safeView !== 'boolean' || typeof preferences.sidebarCollapsed !== 'boolean') throw new Error('无效的应用设置');
+    if (!preferences || !['dark', 'light'].includes(preferences.theme) || !['original', 'chinese'].includes(preferences.titleDisplayMode) || typeof preferences.safeView !== 'boolean' || typeof preferences.sidebarCollapsed !== 'boolean') throw new Error('无效的应用设置');
     const preferenceStore = requireStore();
     preferenceStore.setSetting('appearance.theme', preferences.theme);
+    preferenceStore.setSetting('appearance.titleDisplayMode', preferences.titleDisplayMode);
     preferenceStore.setSetting('privacy.safeView', String(preferences.safeView));
     preferenceStore.setSetting('appearance.sidebarCollapsed', String(preferences.sidebarCollapsed));
     return readPreferences();

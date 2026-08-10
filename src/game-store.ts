@@ -5,6 +5,7 @@ import type { Game, GameCollection, GameSettingsInput, GameStatus, LaunchProfile
 type GameRow = {
   id: string;
   title: string;
+  chinese_title: string;
   type: Game['type'];
   category: string;
   content_rating: Game['contentRating'];
@@ -53,6 +54,7 @@ function rowToGame(row: GameRow, launchProfiles: LaunchProfile[]): Game {
   return {
     id: row.id,
     title: row.title,
+    chineseTitle: row.chinese_title,
     type: row.type,
     category: row.category,
     contentRating: row.content_rating,
@@ -90,6 +92,7 @@ export class GameStore {
       CREATE TABLE IF NOT EXISTS games (
         id TEXT PRIMARY KEY,
         title TEXT NOT NULL CHECK(length(trim(title)) > 0),
+        chinese_title TEXT NOT NULL DEFAULT '',
         type TEXT NOT NULL,
         category TEXT NOT NULL DEFAULT '',
         content_rating TEXT NOT NULL,
@@ -155,6 +158,9 @@ export class GameStore {
     if (!gameColumns.some((column) => column.name === 'completed_at')) {
       this.database.exec('ALTER TABLE games ADD COLUMN completed_at TEXT');
     }
+    if (!gameColumns.some((column) => column.name === 'chinese_title')) {
+      this.database.exec("ALTER TABLE games ADD COLUMN chinese_title TEXT NOT NULL DEFAULT ''");
+    }
     if (!gameColumns.some((column) => column.name === 'category')) {
       this.database.exec("ALTER TABLE games ADD COLUMN category TEXT NOT NULL DEFAULT ''");
       this.database.exec(`
@@ -206,13 +212,14 @@ export class GameStore {
     this.database
       .prepare(`
         INSERT INTO games (
-          id, title, type, category, content_rating, executable_path, working_directory,
+          id, title, chinese_title, type, category, content_rating, executable_path, working_directory,
           launch_arguments, developer, description, status, wishlist, hide_in_safe_view, completed_at, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `)
       .run(
         id,
         input.title.trim(),
+        input.chineseTitle?.trim() ?? '',
         input.type,
         input.category?.trim() || ({ visual_novel: 'Galgame', rpg: 'RPG', simulation: '模拟经营', action: '动作游戏', other: '其他游戏' } as const)[input.type],
         input.contentRating,
@@ -271,8 +278,9 @@ export class GameStore {
   }
 
   setGameSettings(id: string, input: GameSettingsInput): Game {
-    this.database.prepare('UPDATE games SET title = ?, wishlist = ?, hide_in_safe_view = ?, updated_at = ? WHERE id = ?').run(
+    this.database.prepare('UPDATE games SET title = ?, chinese_title = ?, wishlist = ?, hide_in_safe_view = ?, updated_at = ? WHERE id = ?').run(
       input.title.trim(),
+      input.chineseTitle.trim(),
       input.wishlist ? 1 : 0,
       input.hideInSafeView ? 1 : 0,
       new Date().toISOString(),

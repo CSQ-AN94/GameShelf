@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
-import type { AppPreferences, ContentRating, Game, GameCollection, GameSetupAnalysis, GameStatus, GameType, LaunchProfile, NewGameInput, ThemeMode, UserProfile } from '../shared';
+import type { AppPreferences, ContentRating, Game, GameCollection, GameSetupAnalysis, GameStatus, GameType, LaunchProfile, NewGameInput, ThemeMode, TitleDisplayMode, UserProfile } from '../shared';
+import { alternateTitle, displayTitle } from '../title-display';
 
 type LibraryFilter = 'home' | 'settings' | 'all' | 'recent' | 'wishlist' | GameStatus | `category:${string}` | `collection:${string}`;
-type IconName = 'home' | 'settings' | 'library' | 'clock' | 'play' | 'check' | 'search' | 'shield' | 'plus' | 'book' | 'more' | 'folder' | 'list';
+type IconName = 'home' | 'settings' | 'library' | 'clock' | 'play' | 'check' | 'search' | 'shield' | 'plus' | 'book' | 'more' | 'folder' | 'list' | 'sidebar';
 
 const iconPaths: Record<IconName, string> = {
   home: 'M3 10.8 12 3l9 7.8M5.5 9.7V21h13V9.7M9.5 21v-7h5v7',
@@ -17,7 +18,8 @@ const iconPaths: Record<IconName, string> = {
   book: 'M4 5.5A2.5 2.5 0 0 1 6.5 3H11v17H6.5A2.5 2.5 0 0 0 4 22V5.5ZM20 5.5A2.5 2.5 0 0 0 17.5 3H13v17h4.5A2.5 2.5 0 0 1 20 22V5.5Z',
   more: 'M5 12h.01M12 12h.01M19 12h.01',
   folder: 'M3 6h7l2 2h9v11H3Z',
-  list: 'M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01'
+  list: 'M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01',
+  sidebar: 'M5.5 4.5h13A1.5 1.5 0 0 1 20 6v12a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 18V6a1.5 1.5 0 0 1 1.5-1.5ZM9 4.5v15'
 };
 
 const typeLabels: Record<GameType, string> = {
@@ -73,28 +75,32 @@ function executableName(game: Game): string {
   return game.executablePath.split(/[\\/]/).pop() ?? game.executablePath;
 }
 
-function Poster({ game, onOpen }: { game: Game; onOpen: () => void }) {
+function Poster({ game, titleMode, onOpen }: { game: Game; titleMode: TitleDisplayMode; onOpen: () => void }) {
+  const title = displayTitle(game, titleMode);
+  const alternate = alternateTitle(game, titleMode);
   return (
-    <button className="poster" onClick={onOpen} aria-label={`打开 ${game.title}`}>
+    <button className="poster" onClick={onOpen} aria-label={`打开 ${title}`} title={title}>
       <div className="poster-art">
-        {game.coverDataUrl ? <img src={game.coverDataUrl} alt="" /> : <div className="poster-placeholder"><span>{game.title.slice(0, 1).toUpperCase()}</span></div>}
+        {game.coverDataUrl ? <img src={game.coverDataUrl} alt="" /> : <div className="poster-placeholder"><span>{title.slice(0, 1).toUpperCase()}</span></div>}
         <div className="poster-overlay"><span className="poster-play"><Icon name="play" fill /></span></div>
         {game.contentRating === 'r18' && <span className="rating-badge">R18</span>}
       </div>
-      <span className="poster-title">{game.title}</span>
+      <span className="poster-title">{title}</span>
       <span className="poster-meta">{statusLabels[game.status]} · {playTime(game.totalPlaySeconds)}</span>
+      <span className="poster-full-title" aria-hidden="true"><strong>{title}</strong>{alternate && <small>{alternate}</small>}</span>
     </button>
   );
 }
 
-function ContinueCard({ game, onOpen, onLaunch }: { game: Game; onOpen: () => void; onLaunch: () => void }) {
+function ContinueCard({ game, titleMode, onOpen, onLaunch }: { game: Game; titleMode: TitleDisplayMode; onOpen: () => void; onLaunch: () => void }) {
+  const title = displayTitle(game, titleMode);
   return (
     <article className={`continue-card ${game.coverDataUrl ? '' : 'without-art'}`}>
-      {game.coverDataUrl ? <img src={game.coverDataUrl} alt="" /> : <span className="continue-initial">{game.title.slice(0, 1)}</span>}
+      {game.coverDataUrl ? <img src={game.coverDataUrl} alt="" /> : <span className="continue-initial">{title.slice(0, 1)}</span>}
       <div className="continue-shade" />
-      <button className="continue-open" onClick={onOpen} aria-label={`查看 ${game.title}`} />
-      <div className="continue-copy"><strong>{game.title}</strong><small>{displayDate(game.lastPlayedAt)} · {playTime(game.totalPlaySeconds)}</small></div>
-      <button className="continue-play" onClick={onLaunch} aria-label={`启动 ${game.title}`}><Icon name="play" fill /></button>
+      <button className="continue-open" onClick={onOpen} aria-label={`查看 ${title}`} />
+      <div className="continue-copy"><strong title={title}>{title}</strong><small>{displayDate(game.lastPlayedAt)} · {playTime(game.totalPlaySeconds)}</small></div>
+      <button className="continue-play" onClick={onLaunch} aria-label={`启动 ${title}`}><Icon name="play" fill /></button>
     </article>
   );
 }
@@ -110,8 +116,9 @@ function EmptyLibrary({ onAdd }: { onAdd: () => void }) {
   );
 }
 
-function HomeView({ games, onOpen, onLaunch, onAdd, onShowAll }: {
+function HomeView({ games, titleMode, onOpen, onLaunch, onAdd, onShowAll }: {
   games: Game[];
+  titleMode: TitleDisplayMode;
   onOpen: (game: Game) => void;
   onLaunch: (game: Game) => void;
   onAdd: () => void;
@@ -130,17 +137,18 @@ function HomeView({ games, onOpen, onLaunch, onAdd, onShowAll }: {
   const topGames = [...games].filter((game) => game.totalPlaySeconds > 0).sort((a, b) => b.totalPlaySeconds - a.totalPlaySeconds).slice(0, 3);
   const longestPlay = topGames[0]?.totalPlaySeconds ?? 1;
   const heroArt = featured.backgroundDataUrl ?? featured.coverDataUrl;
+  const featuredTitle = displayTitle(featured, titleMode);
 
   return (
     <div className="home-scroll">
       <section className="home-hero">
         <div className={`home-hero-art ${heroArt ? '' : 'without-art'}`}>
-          {heroArt ? <img src={heroArt} alt="" /> : <span>{featured.title.slice(0, 1)}</span>}
+          {heroArt ? <img src={heroArt} alt="" /> : <span>{featuredTitle.slice(0, 1)}</span>}
         </div>
         <div className="home-hero-shade" />
         <div className="home-hero-copy">
           <span className="hero-status">{statusLabels[featured.status]}</span>
-          <h1>{featured.title}</h1>
+          <h1 title={featuredTitle}>{featuredTitle}</h1>
           {featured.developer && <p className="hero-developer">{featured.developer}</p>}
           <p className="hero-description">{featured.description || `${typeLabels[featured.type]} · ${ratingLabels[featured.contentRating]}`}</p>
           <div className="hero-tags"><span>{featured.category}</span><span>{ratingLabels[featured.contentRating]}</span></div>
@@ -159,17 +167,17 @@ function HomeView({ games, onOpen, onLaunch, onAdd, onShowAll }: {
       </section>
 
       <div className="home-shelves">
-        {recent.length > 0 && <section className="home-section"><header><h2>继续游玩</h2><button onClick={() => onShowAll()}>查看全部</button></header><div className="continue-grid">{recent.map((game) => <ContinueCard key={game.id} game={game} onOpen={() => onOpen(game)} onLaunch={() => onLaunch(game)} />)}</div></section>}
+        {recent.length > 0 && <section className="home-section"><header><h2>继续游玩</h2><button onClick={() => onShowAll()}>查看全部</button></header><div className="continue-grid">{recent.map((game) => <ContinueCard key={game.id} game={game} titleMode={titleMode} onOpen={() => onOpen(game)} onLaunch={() => onLaunch(game)} />)}</div></section>}
         <section className="home-section">
           <header><div><h2>游戏库</h2><span>{games.length} 个本地游戏</span></div><div className="shelf-actions"><button onClick={onAdd}><Icon name="plus" />添加游戏</button><button onClick={onShowAll}>全部游戏</button></div></header>
-          <div className="poster-grid home-grid">{shelf.map((game) => <Poster key={game.id} game={game} onOpen={() => onOpen(game)} />)}</div>
+          <div className="poster-grid home-grid">{shelf.map((game) => <Poster key={game.id} game={game} titleMode={titleMode} onOpen={() => onOpen(game)} />)}</div>
         </section>
         <section className="stats-window">
           <header><div><span className="stats-mark">⌁</span><div><h2>游戏统计</h2><p>根据这台电脑上的游玩记录生成</p></div></div></header>
           <div className="stats-summary"><div><small>游戏总数</small><strong>{games.length}</strong></div><div><small>累计时长</small><strong>{playTime(totalPlaySeconds)}</strong></div><div><small>启动次数</small><strong>{totalLaunches}</strong></div><div><small>已玩完</small><strong>{completedCount}</strong></div></div>
           <div className="stats-body">
             <div className="library-breakdown"><h3>书库状态</h3><div className="breakdown-bar"><i style={{ width: `${completedCount / games.length * 100}%` }} /><i style={{ width: `${playingCount / games.length * 100}%` }} /><i style={{ width: `${unplayedCount / games.length * 100}%` }} /></div><div className="breakdown-legend"><span><i />已玩完 {completedCount}</span><span><i />游玩中 {playingCount}</span><span><i />欲玩 {wishlistCount}</span></div></div>
-            <div className="top-played"><h3>游玩时间最多</h3>{topGames.length === 0 ? <p>开始游玩后，这里会出现统计。</p> : topGames.map((game) => <button key={game.id} onClick={() => onOpen(game)}><span>{game.title}</span><i><b style={{ width: `${game.totalPlaySeconds / longestPlay * 100}%` }} /></i><small>{playTime(game.totalPlaySeconds)}</small></button>)}</div>
+            <div className="top-played"><h3>游玩时间最多</h3>{topGames.length === 0 ? <p>开始游玩后，这里会出现统计。</p> : topGames.map((game) => <button key={game.id} onClick={() => onOpen(game)} title={displayTitle(game, titleMode)}><span>{displayTitle(game, titleMode)}</span><i><b style={{ width: `${game.totalPlaySeconds / longestPlay * 100}%` }} /></i><small>{playTime(game.totalPlaySeconds)}</small></button>)}</div>
           </div>
         </section>
       </div>
@@ -177,7 +185,7 @@ function HomeView({ games, onOpen, onLaunch, onAdd, onShowAll }: {
   );
 }
 
-function CompletedTimeline({ games, onOpen, onStatusChange }: { games: Game[]; onOpen: (game: Game) => void; onStatusChange: (game: Game, status: GameStatus) => void }) {
+function CompletedTimeline({ games, titleMode, onOpen, onStatusChange }: { games: Game[]; titleMode: TitleDisplayMode; onOpen: (game: Game) => void; onStatusChange: (game: Game, status: GameStatus) => void }) {
   const sorted = [...games].sort((a, b) => (b.completedAt ?? b.updatedAt).localeCompare(a.completedAt ?? a.updatedAt));
   if (sorted.length === 0) return <div className="no-results">还没有已玩完的游戏</div>;
   return (
@@ -185,19 +193,20 @@ function CompletedTimeline({ games, onOpen, onStatusChange }: { games: Game[]; o
       {sorted.map((game) => <article className="timeline-entry" key={game.id}>
         <time>{new Intl.DateTimeFormat('zh-CN', { year: 'numeric', month: 'short', day: 'numeric' }).format(new Date(game.completedAt ?? game.updatedAt))}</time>
         <span className="timeline-dot" />
-        <button className="timeline-cover" onClick={() => onOpen(game)}>{game.coverDataUrl ? <img src={game.coverDataUrl} alt={`${game.title} 封面`} /> : <span>{game.title.slice(0, 1)}</span>}</button>
-        <div className="timeline-copy"><strong>{game.title}</strong><small>{game.developer || typeLabels[game.type]}</small><p>{playTime(game.totalPlaySeconds)} · 启动 {game.launchCount} 次</p><button onClick={() => onStatusChange(game, 'playing')}>改为游玩中</button></div>
+        <button className="timeline-cover" onClick={() => onOpen(game)}>{game.coverDataUrl ? <img src={game.coverDataUrl} alt={`${displayTitle(game, titleMode)} 封面`} /> : <span>{displayTitle(game, titleMode).slice(0, 1)}</span>}</button>
+        <div className="timeline-copy"><strong title={displayTitle(game, titleMode)}>{displayTitle(game, titleMode)}</strong><small>{game.developer || typeLabels[game.type]}</small><p>{playTime(game.totalPlaySeconds)} · 启动 {game.launchCount} 次</p><button onClick={() => onStatusChange(game, 'playing')}>改为游玩中</button></div>
       </article>)}
     </div>
   );
 }
 
-function SettingsView({ preferences, profile, gameCount, collectionCount, onThemeChange, onSafeViewChange, onEditProfile, onOpenDataDirectory }: {
+function SettingsView({ preferences, profile, gameCount, collectionCount, onThemeChange, onTitleDisplayModeChange, onSafeViewChange, onEditProfile, onOpenDataDirectory }: {
   preferences: AppPreferences;
   profile: UserProfile;
   gameCount: number;
   collectionCount: number;
   onThemeChange: (theme: ThemeMode) => void;
+  onTitleDisplayModeChange: (mode: TitleDisplayMode) => void;
   onSafeViewChange: (enabled: boolean) => void;
   onEditProfile: () => void;
   onOpenDataDirectory: () => void;
@@ -207,6 +216,7 @@ function SettingsView({ preferences, profile, gameCount, collectionCount, onThem
       <header><h1>设置</h1><p>外观、隐私与本机资料</p></header>
       <div className="settings-sections">
         <section className="settings-card"><div className="settings-card-copy"><h2>外观</h2><p>选择适合桌面环境的界面配色。</p></div><div className="theme-options"><button className={preferences.theme === 'dark' ? 'selected' : ''} onClick={() => onThemeChange('dark')}><span className="theme-preview dark"><i /><i /><i /></span><strong>深色</strong></button><button className={preferences.theme === 'light' ? 'selected' : ''} onClick={() => onThemeChange('light')}><span className="theme-preview light"><i /><i /><i /></span><strong>浅色</strong></button></div></section>
+        <section className="settings-card settings-row"><div className="settings-card-copy"><h2>游戏标题</h2><p>选择书库默认显示原名还是中文名；未填写中文名的游戏会自动显示原名。</p></div><div className="title-mode-options" role="group" aria-label="游戏标题显示方式"><button className={preferences.titleDisplayMode === 'original' ? 'selected' : ''} onClick={() => onTitleDisplayModeChange('original')}>原名</button><button className={preferences.titleDisplayMode === 'chinese' ? 'selected' : ''} onClick={() => onTitleDisplayModeChange('chinese')}>中文名</button></div></section>
         <section className="settings-card settings-row"><div className="settings-card-copy"><h2>安全视图</h2><p>开启后隐藏你在各游戏设置中指定的内容。</p></div><button className={preferences.safeView ? 'settings-switch on' : 'settings-switch'} onClick={() => onSafeViewChange(!preferences.safeView)}><i /></button></section>
         <section className="settings-card settings-row"><div className="settings-profile">{profile.avatarDataUrl ? <img src={profile.avatarDataUrl} alt="" /> : <span>{profile.name.slice(0, 1) || '玩'}</span>}<div><h2>{profile.name}</h2><p>头像与昵称</p></div></div><button className="settings-action" onClick={onEditProfile}>编辑资料</button></section>
         <section className="settings-card settings-row"><div className="settings-card-copy"><h2>本机资料</h2><p>{gameCount} 个游戏 · {collectionCount} 个合集。数据库、封面和记录保存在 Windows 应用数据目录。</p></div><button className="settings-action" onClick={onOpenDataDirectory}>打开文件夹</button></section>
@@ -215,8 +225,9 @@ function SettingsView({ preferences, profile, gameCount, collectionCount, onThem
   );
 }
 
-function GameDetail({ game, collections, onBack, onLaunch, onStatusChange, onToggleWishlist, onEditCategory, onManageCollections, onEditSettings }: {
+function GameDetail({ game, titleMode, collections, onBack, onLaunch, onStatusChange, onToggleWishlist, onEditCategory, onManageCollections, onEditSettings }: {
   game: Game;
+  titleMode: TitleDisplayMode;
   collections: GameCollection[];
   onBack: () => void;
   onLaunch: (profileId?: string) => void;
@@ -227,6 +238,8 @@ function GameDetail({ game, collections, onBack, onLaunch, onStatusChange, onTog
   onEditSettings: () => void;
 }) {
   const backdrop = game.backgroundDataUrl ?? game.coverDataUrl;
+  const title = displayTitle(game, titleMode);
+  const alternate = alternateTitle(game, titleMode);
   const metadata = [
     game.releaseDate && ['发布日期', game.releaseDate],
     game.languages.length > 0 && ['语言', game.languages.join('、')],
@@ -235,14 +248,15 @@ function GameDetail({ game, collections, onBack, onLaunch, onStatusChange, onTog
 
   return (
     <article className="detail-view">
-      <div className="detail-backdrop">{backdrop ? <img src={backdrop} alt="" /> : <span>{game.title.slice(0, 1)}</span>}</div>
+      <div className="detail-backdrop">{backdrop ? <img src={backdrop} alt="" /> : <span>{title.slice(0, 1)}</span>}</div>
       <div className="detail-shade" />
       <button className="back-button" onClick={onBack}>‹ 返回游戏库</button>
       <div className="detail-content">
-        <div className="detail-cover">{game.coverDataUrl ? <img src={game.coverDataUrl} alt={`${game.title} 封面`} /> : <div>{game.title.slice(0, 1)}</div>}</div>
+        <div className="detail-cover">{game.coverDataUrl ? <img src={game.coverDataUrl} alt={`${title} 封面`} /> : <div>{title.slice(0, 1)}</div>}</div>
         <div className="detail-copy">
           <div className="detail-kicker"><button className="category-chip" onClick={onEditCategory}>{game.category}</button><span>{typeLabels[game.type]}</span><span>{ratingLabels[game.contentRating]}</span><span>{statusLabels[game.status]}</span></div>
-          <h1>{game.title}</h1>
+          <h1>{title}</h1>
+          {alternate && <p className="detail-alternate-title">{alternate}</p>}
           <p className="detail-developer">{game.developer || '未填写会社或开发者'}</p>
           <p className="detail-description">{game.description || '还没有简介。之后可以补充本地资料或接入元数据源。'}</p>
           <div className="detail-actions"><button className="play-button" onClick={() => onLaunch()}><Icon name="play" fill />{game.lastPlayedAt ? '继续游玩' : '开始游玩'}</button><select className="status-select" value={game.status} onChange={(event) => onStatusChange(event.target.value as GameStatus)}>{Object.entries(statusLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select><button className={game.wishlist ? 'collection-button active' : 'collection-button'} onClick={onToggleWishlist}>{game.wishlist ? '已加入欲玩' : '加入欲玩'}</button><button className="collection-button" onClick={onManageCollections}><Icon name="folder" />管理合集</button></div>
@@ -258,6 +272,7 @@ function GameDetail({ game, collections, onBack, onLaunch, onStatusChange, onTog
 
 function AddGameDialog({ categorySuggestions, onClose, onAdded }: { categorySuggestions: string[]; onClose: () => void; onAdded: (game: Game) => void }) {
   const [title, setTitle] = useState('');
+  const [chineseTitle, setChineseTitle] = useState('');
   const [type, setType] = useState<GameType>('other');
   const [category, setCategory] = useState('');
   const [contentRating, setContentRating] = useState<ContentRating>('general');
@@ -308,7 +323,7 @@ function AddGameDialog({ categorySuggestions, onClose, onAdded }: { categorySugg
     setError('');
     setSaving(true);
     try {
-      const input: NewGameInput = { title, type, category, contentRating, executablePath, coverSourcePath, status, wishlist, hideInSafeView };
+      const input: NewGameInput = { title, chineseTitle, type, category, contentRating, executablePath, coverSourcePath, status, wishlist, hideInSafeView };
       onAdded(await window.gameshelf.addGame(input));
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : String(reason));
@@ -325,7 +340,8 @@ function AddGameDialog({ categorySuggestions, onClose, onAdded }: { categorySugg
           <div className="add-layout">
             <button className="cover-picker" type="button" onClick={chooseCover}>{coverPreview ? <img src={coverPreview} alt="封面预览" /> : <><Icon name="plus" /><small>选择封面</small></>}</button>
             <div className="form-fields">
-              <label>游戏名称<input autoFocus value={title} onChange={(event) => setTitle(event.target.value)} placeholder="输入标题" /></label>
+              <label>游戏原名<input autoFocus value={title} onChange={(event) => setTitle(event.target.value)} placeholder="作品的原始完整名称" /></label>
+              <label>中文名（可选）<input value={chineseTitle} onChange={(event) => setChineseTitle(event.target.value)} placeholder="用于中文标题显示模式" /></label>
               <label>启动文件<div className="path-field"><input readOnly value={executablePath} placeholder="选择 .exe 文件" /><button type="button" onClick={chooseExecutable}>选择</button></div></label>
               {(analyzing || analysis) && <div className="detection-summary">{analyzing ? <span>正在识别游戏结构…</span> : <><strong>{analysis?.engine ?? '未识别引擎'}</strong><span>{analysis?.alternativeExecutables.length ?? 0} 个其他启动项</span><span>{analysis?.modDirectories.length ?? 0} 个 Mod 位置</span><span>{analysis?.saveDirectories.length ?? 0} 个存档位置</span><span>{analysis?.patchDirectories.length ?? 0} 个补丁位置</span></>}</div>}
               <div className="form-row"><label>游戏类型<select value={type} onChange={(event) => setType(event.target.value as GameType)}>{Object.entries(typeLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label><label>内容分级<select value={contentRating} onChange={(event) => { const rating = event.target.value as ContentRating; setContentRating(rating); if (rating === 'r18') setHideInSafeView(true); }}>{Object.entries(ratingLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label></div>
@@ -376,24 +392,25 @@ function ProfileDialog({ profile, onClose, onSaved }: { profile: UserProfile; on
   );
 }
 
-function CollectionMembershipDialog({ game, collections, onClose, onSaved }: { game: Game; collections: GameCollection[]; onClose: () => void; onSaved: (ids: string[]) => void }) {
+function CollectionMembershipDialog({ game, titleMode, collections, onClose, onSaved }: { game: Game; titleMode: TitleDisplayMode; collections: GameCollection[]; onClose: () => void; onSaved: (ids: string[]) => void }) {
   const [selected, setSelected] = useState(() => new Set(collections.filter((collection) => collection.gameIds.includes(game.id)).map((collection) => collection.id)));
   return (
-    <div className="modal-backdrop"><section className="modal compact-modal" role="dialog" aria-modal="true" aria-labelledby="membership-title"><header className="modal-header"><div><span className="eyebrow">{game.title}</span><h2 id="membership-title">管理所属合集</h2></div><button className="close-button" onClick={onClose}>×</button></header><div className="membership-list">{collections.length === 0 ? <p>请先在侧栏新建一个合集。</p> : collections.map((collection) => <label key={collection.id}><input type="checkbox" checked={selected.has(collection.id)} onChange={() => setSelected((current) => { const next = new Set(current); next.has(collection.id) ? next.delete(collection.id) : next.add(collection.id); return next; })} /><span><strong>{collection.name}</strong><small>{collection.gameIds.length} 个游戏</small></span></label>)}</div><footer className="modal-footer membership-footer"><button type="button" className="secondary-button" onClick={onClose}>取消</button><button className="primary-button" onClick={() => onSaved([...selected])}>保存</button></footer></section></div>
+    <div className="modal-backdrop"><section className="modal compact-modal" role="dialog" aria-modal="true" aria-labelledby="membership-title"><header className="modal-header"><div><span className="eyebrow">{displayTitle(game, titleMode)}</span><h2 id="membership-title">管理所属合集</h2></div><button className="close-button" onClick={onClose}>×</button></header><div className="membership-list">{collections.length === 0 ? <p>请先在侧栏新建一个合集。</p> : collections.map((collection) => <label key={collection.id}><input type="checkbox" checked={selected.has(collection.id)} onChange={() => setSelected((current) => { const next = new Set(current); next.has(collection.id) ? next.delete(collection.id) : next.add(collection.id); return next; })} /><span><strong>{collection.name}</strong><small>{collection.gameIds.length} 个游戏</small></span></label>)}</div><footer className="modal-footer membership-footer"><button type="button" className="secondary-button" onClick={onClose}>取消</button><button className="primary-button" onClick={() => onSaved([...selected])}>保存</button></footer></section></div>
   );
 }
 
-function CategoryDialog({ game, suggestions, onClose, onSaved }: { game: Game; suggestions: string[]; onClose: () => void; onSaved: (category: string) => void }) {
+function CategoryDialog({ game, titleMode, suggestions, onClose, onSaved }: { game: Game; titleMode: TitleDisplayMode; suggestions: string[]; onClose: () => void; onSaved: (category: string) => void }) {
   const [category, setCategory] = useState(game.category);
   return (
-    <div className="modal-backdrop"><section className="modal compact-modal" role="dialog" aria-modal="true" aria-labelledby="category-title"><header className="modal-header"><div><span className="eyebrow">{game.title}</span><h2 id="category-title">修改游戏分类</h2></div><button className="close-button" onClick={onClose}>×</button></header><div className="category-editor"><div className="form-fields"><label>分类<input autoFocus value={category} list="category-edit-suggestions" onChange={(event) => setCategory(event.target.value)} /><datalist id="category-edit-suggestions">{suggestions.map((item) => <option key={item} value={item} />)}</datalist></label></div><p>可以选择现有分类，也可以直接输入新的分类名称。</p></div><footer className="modal-footer membership-footer"><button type="button" className="secondary-button" onClick={onClose}>取消</button><button className="primary-button" onClick={() => onSaved(category)}>保存</button></footer></section></div>
+    <div className="modal-backdrop"><section className="modal compact-modal" role="dialog" aria-modal="true" aria-labelledby="category-title"><header className="modal-header"><div><span className="eyebrow">{displayTitle(game, titleMode)}</span><h2 id="category-title">修改游戏分类</h2></div><button className="close-button" onClick={onClose}>×</button></header><div className="category-editor"><div className="form-fields"><label>分类<input autoFocus value={category} list="category-edit-suggestions" onChange={(event) => setCategory(event.target.value)} /><datalist id="category-edit-suggestions">{suggestions.map((item) => <option key={item} value={item} />)}</datalist></label></div><p>可以选择现有分类，也可以直接输入新的分类名称。</p></div><footer className="modal-footer membership-footer"><button type="button" className="secondary-button" onClick={onClose}>取消</button><button className="primary-button" onClick={() => onSaved(category)}>保存</button></footer></section></div>
   );
 }
 
 type LaunchProfileDraft = LaunchProfile & { isNew?: boolean };
 
-function GameSettingsDialog({ game, onClose, onChanged }: { game: Game; onClose: () => void; onChanged: (game: Game) => void }) {
+function GameSettingsDialog({ game, titleMode, onClose, onChanged }: { game: Game; titleMode: TitleDisplayMode; onClose: () => void; onChanged: (game: Game) => void }) {
   const [title, setTitle] = useState(game.title);
+  const [chineseTitle, setChineseTitle] = useState(game.chineseTitle);
   const [wishlist, setWishlist] = useState(game.wishlist);
   const [hideInSafeView, setHideInSafeView] = useState(game.hideInSafeView);
   const [coverSourcePath, setCoverSourcePath] = useState<string | null>(null);
@@ -433,12 +450,18 @@ function GameSettingsDialog({ game, onClose, onChanged }: { game: Game; onClose:
     if (selected) patchProfile(id, { executablePath: selected, workingDirectory: selected.replace(/[\\/][^\\/]+$/, '') });
   }
 
+  async function openGameDirectory() {
+    setError('');
+    try { await window.gameshelf.openGameDirectory(game.id); }
+    catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); }
+  }
+
   async function saveGeneral(event: FormEvent) {
     event.preventDefault();
     setError('');
     setSaving(true);
     try {
-      onChanged(await window.gameshelf.updateGameSettings(game.id, { title, wishlist, hideInSafeView, coverSourcePath, backgroundSourcePath }));
+      onChanged(await window.gameshelf.updateGameSettings(game.id, { title, chineseTitle, wishlist, hideInSafeView, coverSourcePath, backgroundSourcePath }));
       setCoverSourcePath(null);
       setBackgroundSourcePath(null);
       setSaved(true);
@@ -476,6 +499,8 @@ function GameSettingsDialog({ game, onClose, onChanged }: { game: Game; onClose:
     setProfiles((current) => [...current, { id: `new-${Date.now()}`, name: '新启动项', executablePath: '', workingDirectory: '', launchArguments: '', isDefault: false, isNew: true }]);
   }
 
+  const headingTitle = displayTitle({ title: title || game.title, chineseTitle }, titleMode);
+
   return (
     <div className="modal-backdrop"><section className="modal game-settings-modal" role="dialog" aria-modal="true" aria-labelledby="game-settings-title">
       <header className="game-settings-visual">
@@ -488,18 +513,19 @@ function GameSettingsDialog({ game, onClose, onChanged }: { game: Game; onClose:
           {coverPreview ? <img src={coverPreview} alt="竖版封面预览" /> : <span className="artwork-placeholder">竖版封面</span>}
           <span className="cover-action">更换封面</span>
         </button>
-        <div className="game-settings-heading"><span>游戏设置</span><h2 id="game-settings-title">{title || game.title}</h2><p>{game.developer || '本地游戏'}</p></div>
+        <div className="game-settings-heading"><span>游戏设置</span><h2 id="game-settings-title">{headingTitle}</h2><p>{game.developer || '本地游戏'}</p></div>
         <button className="close-button settings-close" onClick={onClose} aria-label="关闭">×</button>
       </header>
       <nav className="game-settings-tabs" aria-label="游戏设置栏目"><button className={pane === 'overview' ? 'active' : ''} onClick={() => setPane('overview')}>资料与外观</button><button className={pane === 'launch' ? 'active' : ''} onClick={() => setPane('launch')}>启动项 <span>{profiles.length}</span></button></nav>
       <div className="game-settings-body">
         {pane === 'overview' ? <form id="game-general-form" className="game-general-settings" onSubmit={saveGeneral}>
-          <section className="settings-surface"><header><span>基本资料</span><p>这些内容只保存在你的电脑上。</p></header><label className="settings-field">显示名称<input value={title} onChange={(event) => { setTitle(event.target.value); setSaved(false); }} /></label></section>
+          <section className="settings-surface"><header><span>完整标题</span><p>原名永久保留；中文名可以留空。</p></header><label className="settings-field">游戏原名<input value={title} onChange={(event) => { setTitle(event.target.value); setSaved(false); }} /></label><label className="settings-field secondary-title-field">中文名（可选）<input value={chineseTitle} onChange={(event) => { setChineseTitle(event.target.value); setSaved(false); }} placeholder="未填写时自动使用原名" /></label></section>
           <section className="settings-surface"><header><span>书库行为</span><p>分别控制计划列表与安全视图。</p></header><div className="settings-toggle-list">
             <label className="setting-toggle-row"><span><strong>加入欲玩清单</strong><small>在侧栏的欲玩清单中显示</small></span><input type="checkbox" checked={wishlist} onChange={(event) => { setWishlist(event.target.checked); setSaved(false); }} /><i /></label>
             <label className="setting-toggle-row"><span><strong>安全视图中隐藏</strong><small>开启安全视图时隐藏标题、图片和记录</small></span><input type="checkbox" checked={hideInSafeView} onChange={(event) => { setHideInSafeView(event.target.checked); setSaved(false); }} /><i /></label>
           </div></section>
           <section className="artwork-note"><Icon name="book" /><div><strong>两套图片，各司其职</strong><p>竖版封面用于书库卡片；横向背景用于主页主视觉和游戏详情。点击上方图片即可随时替换。</p></div></section>
+          <section className="game-location"><Icon name="folder" /><div><strong>游戏所在文件夹</strong><p title={game.workingDirectory}>{game.workingDirectory}</p></div><button type="button" className="settings-action" onClick={() => void openGameDirectory()}>打开文件夹</button></section>
         </form> : <section className="launch-settings"><header><div><h3>启动项</h3><p>为原版、汉化版或补丁版分别选择 exe；默认项用于“开始游玩”。</p></div><button className="settings-action" onClick={addProfile}><Icon name="plus" />添加启动项</button></header>
           <div className="launch-editors">{profiles.map((profile) => <div className="launch-editor" key={profile.id}>
             <div className="launch-editor-title"><input value={profile.name} onChange={(event) => patchProfile(profile.id, { name: event.target.value })} /><span>{profile.isDefault ? '默认' : ''}</span></div>
@@ -533,7 +559,7 @@ export function App() {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<LibraryFilter>('home');
   const [search, setSearch] = useState('');
-  const [preferences, setPreferences] = useState<AppPreferences>({ theme: 'dark', safeView: false, sidebarCollapsed: false });
+  const [preferences, setPreferences] = useState<AppPreferences>({ theme: 'dark', titleDisplayMode: 'original', safeView: false, sidebarCollapsed: false });
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
   const [creatingCollection, setCreatingCollection] = useState(false);
@@ -579,7 +605,7 @@ export function App() {
     const query = search.trim().toLocaleLowerCase();
     return games.filter((game) => {
       if (preferences.safeView && game.hideInSafeView) return false;
-      if (query) return `${game.title} ${game.developer} ${game.category}`.toLocaleLowerCase().includes(query);
+      if (query) return `${game.title} ${game.chineseTitle} ${game.developer} ${game.category}`.toLocaleLowerCase().includes(query);
       if (filter.startsWith('collection:')) return collections.find((collection) => collection.id === filter.slice(11))?.gameIds.includes(game.id) ?? false;
       if (filter.startsWith('category:')) return game.category === filter.slice(9);
       if (filter === 'recent') return Boolean(game.lastPlayedAt);
@@ -598,7 +624,7 @@ export function App() {
   async function launch(game: Game, profileId?: string) {
     try {
       await window.gameshelf.launchGame(game.id, profileId);
-      setMessage(`已启动 ${game.title}`);
+      setMessage(`已启动 ${displayTitle(game, preferences.titleDisplayMode)}`);
     } catch (reason) {
       setMessage(reason instanceof Error ? reason.message : String(reason));
     }
@@ -610,9 +636,10 @@ export function App() {
 
   async function toggleWishlist(game: Game) {
     try {
-      const updated = await window.gameshelf.updateGameSettings(game.id, { title: game.title, wishlist: !game.wishlist, hideInSafeView: game.hideInSafeView });
+      const updated = await window.gameshelf.updateGameSettings(game.id, { title: game.title, chineseTitle: game.chineseTitle, wishlist: !game.wishlist, hideInSafeView: game.hideInSafeView });
       replaceGame(updated);
-      setMessage(updated.wishlist ? `已将 ${game.title} 加入欲玩清单` : `已将 ${game.title} 移出欲玩清单`);
+      const title = displayTitle(game, preferences.titleDisplayMode);
+      setMessage(updated.wishlist ? `已将 ${title} 加入欲玩清单` : `已将 ${title} 移出欲玩清单`);
     } catch (reason) { setMessage(reason instanceof Error ? reason.message : String(reason)); }
   }
 
@@ -620,7 +647,8 @@ export function App() {
     try {
       const updated = await window.gameshelf.updateGameStatus(game.id, status);
       setGames((current) => current.map((item) => item.id === updated.id ? updated : item));
-      setMessage(status === 'completed' ? `已将 ${game.title} 标记为已玩完` : `已更新 ${game.title} 的状态`);
+      const title = displayTitle(game, preferences.titleDisplayMode);
+      setMessage(status === 'completed' ? `已将 ${title} 标记为已玩完` : `已更新 ${title} 的状态`);
     } catch (reason) {
       setMessage(reason instanceof Error ? reason.message : String(reason));
     }
@@ -631,7 +659,7 @@ export function App() {
       const updated = await window.gameshelf.updateGameCategory(game.id, category);
       setGames((current) => current.map((item) => item.id === updated.id ? updated : item));
       setEditingCategoryFor(null);
-      setMessage(`已将 ${game.title} 分类为 ${updated.category}`);
+      setMessage(`已将 ${displayTitle(game, preferences.titleDisplayMode)} 分类为 ${updated.category}`);
     } catch (reason) {
       setMessage(reason instanceof Error ? reason.message : String(reason));
     }
@@ -642,7 +670,7 @@ export function App() {
       await window.gameshelf.setGameCollections(game.id, ids);
       setCollections((current) => current.map((collection) => ({ ...collection, gameIds: ids.includes(collection.id) ? [...new Set([...collection.gameIds, game.id])] : collection.gameIds.filter((id) => id !== game.id) })));
       setManagingCollectionsFor(null);
-      setMessage(`已更新 ${game.title} 的合集`);
+      setMessage(`已更新 ${displayTitle(game, preferences.titleDisplayMode)} 的合集`);
     } catch (reason) {
       setMessage(reason instanceof Error ? reason.message : String(reason));
     }
@@ -669,7 +697,7 @@ export function App() {
   return (
     <div className={preferences.sidebarCollapsed ? 'app-shell sidebar-collapsed' : 'app-shell'}>
       <aside className="sidebar">
-        <div className="sidebar-top"><label className="sidebar-search"><Icon name="search" /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="搜索游戏" /></label><button className="sidebar-collapse" title={preferences.sidebarCollapsed ? '展开侧栏' : '收起侧栏'} aria-label={preferences.sidebarCollapsed ? '展开侧栏' : '收起侧栏'} onClick={() => void savePreferences({ ...preferences, sidebarCollapsed: !preferences.sidebarCollapsed })}><Icon name="list" /></button></div>
+        <div className="sidebar-top"><label className="sidebar-search"><Icon name="search" /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="搜索游戏" /></label><button className="sidebar-collapse" title={preferences.sidebarCollapsed ? '展开侧栏' : '收起侧栏'} aria-label={preferences.sidebarCollapsed ? '展开侧栏' : '收起侧栏'} onClick={() => void savePreferences({ ...preferences, sidebarCollapsed: !preferences.sidebarCollapsed })}><Icon name="sidebar" /></button></div>
         <nav className="sidebar-nav">
           {navItem('home', 'home', '主页')}
           <p className="nav-heading">游戏库</p>
@@ -688,17 +716,17 @@ export function App() {
       </aside>
 
       <main className="main-pane">
-        {selected ? <GameDetail game={selected} collections={collections} onBack={() => setSelectedId(null)} onLaunch={(profileId) => void launch(selected, profileId)} onStatusChange={(status) => void updateStatus(selected, status)} onToggleWishlist={() => void toggleWishlist(selected)} onEditCategory={() => setEditingCategoryFor(selected.id)} onManageCollections={() => setManagingCollectionsFor(selected.id)} onEditSettings={() => setEditingSettingsFor(selected.id)} /> : filter === 'settings' && !search.trim() ? <SettingsView preferences={preferences} profile={profile} gameCount={games.length} collectionCount={collections.length} onThemeChange={(theme) => void savePreferences({ ...preferences, theme })} onSafeViewChange={(safeView) => void savePreferences({ ...preferences, safeView })} onEditProfile={() => setEditingProfile(true)} onOpenDataDirectory={() => void openDataDirectory()} /> : loading && games.length === 0 ? <div className="loading-state">正在读取游戏库…</div> : games.length === 0 ? <EmptyLibrary onAdd={() => setAdding(true)} /> : showLibrary ? (
-          <div className="library-view"><header className="library-toolbar"><div><span className="eyebrow">游戏库</span><h1>{search.trim() ? '本机搜索结果' : filterTitle(filter, collections)}</h1></div><div><span>{visibleGames.length} 个游戏</span>{preferences.safeView && <span className="safe-chip">安全视图已开启</span>}<button className="add-button" onClick={() => setAdding(true)}><Icon name="plus" />添加游戏</button></div></header><section className={filter === 'completed' && !search.trim() ? 'timeline-content' : 'library-content'}>{filter === 'completed' && !search.trim() ? <CompletedTimeline games={visibleGames} onOpen={(game) => setSelectedId(game.id)} onStatusChange={(game, status) => void updateStatus(game, status)} /> : <><div className="poster-grid">{visibleGames.map((game) => <Poster key={game.id} game={game} onOpen={() => setSelectedId(game.id)} />)}</div>{visibleGames.length === 0 && <div className="no-results">没有符合当前条件的游戏</div>}</>}</section></div>
-        ) : <HomeView games={visibleGames} onOpen={(game) => setSelectedId(game.id)} onLaunch={(game) => void launch(game)} onAdd={() => setAdding(true)} onShowAll={() => setFilter('all')} />}
+        {selected ? <GameDetail game={selected} titleMode={preferences.titleDisplayMode} collections={collections} onBack={() => setSelectedId(null)} onLaunch={(profileId) => void launch(selected, profileId)} onStatusChange={(status) => void updateStatus(selected, status)} onToggleWishlist={() => void toggleWishlist(selected)} onEditCategory={() => setEditingCategoryFor(selected.id)} onManageCollections={() => setManagingCollectionsFor(selected.id)} onEditSettings={() => setEditingSettingsFor(selected.id)} /> : filter === 'settings' && !search.trim() ? <SettingsView preferences={preferences} profile={profile} gameCount={games.length} collectionCount={collections.length} onThemeChange={(theme) => void savePreferences({ ...preferences, theme })} onTitleDisplayModeChange={(titleDisplayMode) => void savePreferences({ ...preferences, titleDisplayMode })} onSafeViewChange={(safeView) => void savePreferences({ ...preferences, safeView })} onEditProfile={() => setEditingProfile(true)} onOpenDataDirectory={() => void openDataDirectory()} /> : loading && games.length === 0 ? <div className="loading-state">正在读取游戏库…</div> : games.length === 0 ? <EmptyLibrary onAdd={() => setAdding(true)} /> : showLibrary ? (
+          <div className="library-view"><header className="library-toolbar"><div><span className="eyebrow">游戏库</span><h1>{search.trim() ? '本机搜索结果' : filterTitle(filter, collections)}</h1></div><div><span>{visibleGames.length} 个游戏</span>{preferences.safeView && <span className="safe-chip">安全视图已开启</span>}<button className="add-button" onClick={() => setAdding(true)}><Icon name="plus" />添加游戏</button></div></header><section className={filter === 'completed' && !search.trim() ? 'timeline-content' : 'library-content'}>{filter === 'completed' && !search.trim() ? <CompletedTimeline games={visibleGames} titleMode={preferences.titleDisplayMode} onOpen={(game) => setSelectedId(game.id)} onStatusChange={(game, status) => void updateStatus(game, status)} /> : <><div className="poster-grid">{visibleGames.map((game) => <Poster key={game.id} game={game} titleMode={preferences.titleDisplayMode} onOpen={() => setSelectedId(game.id)} />)}</div>{visibleGames.length === 0 && <div className="no-results">没有符合当前条件的游戏</div>}</>}</section></div>
+        ) : <HomeView games={visibleGames} titleMode={preferences.titleDisplayMode} onOpen={(game) => setSelectedId(game.id)} onLaunch={(game) => void launch(game)} onAdd={() => setAdding(true)} onShowAll={() => setFilter('all')} />}
       </main>
 
       {adding && <AddGameDialog categorySuggestions={categories} onClose={() => setAdding(false)} onAdded={(game) => { setAdding(false); setGames((current) => [game, ...current]); setSelectedId(game.id); }} />}
       {creatingCollection && <CreateCollectionDialog onClose={() => setCreatingCollection(false)} onCreated={(collection) => { setCreatingCollection(false); setCollections((current) => [...current, collection].sort((a, b) => a.name.localeCompare(b.name, 'zh-CN'))); setFilter(`collection:${collection.id}`); }} />}
       {editingProfile && <ProfileDialog profile={profile} onClose={() => setEditingProfile(false)} onSaved={(nextProfile) => { setProfile(nextProfile); setEditingProfile(false); }} />}
-      {categoryGame && <CategoryDialog game={categoryGame} suggestions={categories} onClose={() => setEditingCategoryFor(null)} onSaved={(category) => void updateCategory(categoryGame, category)} />}
-      {membershipGame && <CollectionMembershipDialog game={membershipGame} collections={collections} onClose={() => setManagingCollectionsFor(null)} onSaved={(ids) => void saveMembership(membershipGame, ids)} />}
-      {settingsGame && <GameSettingsDialog game={settingsGame} onClose={() => setEditingSettingsFor(null)} onChanged={replaceGame} />}
+      {categoryGame && <CategoryDialog game={categoryGame} titleMode={preferences.titleDisplayMode} suggestions={categories} onClose={() => setEditingCategoryFor(null)} onSaved={(category) => void updateCategory(categoryGame, category)} />}
+      {membershipGame && <CollectionMembershipDialog game={membershipGame} titleMode={preferences.titleDisplayMode} collections={collections} onClose={() => setManagingCollectionsFor(null)} onSaved={(ids) => void saveMembership(membershipGame, ids)} />}
+      {settingsGame && <GameSettingsDialog game={settingsGame} titleMode={preferences.titleDisplayMode} onClose={() => setEditingSettingsFor(null)} onChanged={replaceGame} />}
       {message && <div className="toast">{message}</div>}
     </div>
   );

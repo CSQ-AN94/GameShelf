@@ -5,6 +5,7 @@ export type GameStatus = 'unplayed' | 'playing' | 'completed' | 'paused';
 export interface Game {
   id: string;
   title: string;
+  chineseTitle: string;
   type: GameType;
   category: string;
   contentRating: ContentRating;
@@ -34,6 +35,7 @@ export interface Game {
 
 export interface NewGameInput {
   title: string;
+  chineseTitle?: string;
   type: GameType;
   category?: string;
   contentRating: ContentRating;
@@ -66,6 +68,7 @@ export interface LaunchProfileInput {
 
 export interface GameSettingsInput {
   title: string;
+  chineseTitle: string;
   wishlist: boolean;
   hideInSafeView: boolean;
   coverSourcePath?: string | null;
@@ -96,9 +99,11 @@ export interface ProfileInput {
 }
 
 export type ThemeMode = 'dark' | 'light';
+export type TitleDisplayMode = 'original' | 'chinese';
 
 export interface AppPreferences {
   theme: ThemeMode;
+  titleDisplayMode: TitleDisplayMode;
   safeView: boolean;
   sidebarCollapsed: boolean;
 }
@@ -127,6 +132,7 @@ export interface GameShelfApi {
   pickCover: () => Promise<PickedImage | null>;
   pickBackground: () => Promise<PickedImage | null>;
   launchGame: (id: string, profileId?: string) => Promise<void>;
+  openGameDirectory: (id: string) => Promise<string>;
   listCollections: () => Promise<GameCollection[]>;
   createCollection: (name: string) => Promise<GameCollection>;
   setGameCollections: (gameId: string, collectionIds: string[]) => Promise<void>;

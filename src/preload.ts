@@ -15,6 +15,7 @@ const api: GameShelfApi = {
   pickCover: () => ipcRenderer.invoke('games:pick-cover'),
   pickBackground: () => ipcRenderer.invoke('games:pick-background'),
   launchGame: (id, profileId) => ipcRenderer.invoke('games:launch', id, profileId),
+  openGameDirectory: (id) => ipcRenderer.invoke('games:open-directory', id),
   listCollections: () => ipcRenderer.invoke('collections:list'),
   createCollection: (name) => ipcRenderer.invoke('collections:create', name),
   setGameCollections: (gameId, collectionIds) => ipcRenderer.invoke('collections:set-game', gameId, collectionIds),
