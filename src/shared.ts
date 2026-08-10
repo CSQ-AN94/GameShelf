@@ -69,6 +69,7 @@ export type ThemeMode = 'dark' | 'light';
 export interface AppPreferences {
   theme: ThemeMode;
   safeView: boolean;
+  sidebarCollapsed: boolean;
 }
 
 export interface GameSetupAnalysis {

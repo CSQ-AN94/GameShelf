@@ -8,7 +8,7 @@ const file = (relativePath: string): ScannedEntry => ({ relativePath, isDirector
 describe('game setup detection', () => {
   it('recognizes Unity mods, saves, patches, and ignores helper executables', () => {
     const result = classifyGameSetup('G:\\game\\[ACT]复仇之夜\\NightofRevenge.exe', [
-      file('NightofRevenge.exe'), file('UnityPlayer.dll'), file('UnityCrashHandler64.exe'),
+      file('NightofRevenge.exe'), directory('NightofRevenge_Data'), file('UnityCrashHandler64.exe'),
       directory('BepInEx'), directory('BepInEx\\plugins'), directory('SaveData'),
       directory('无码补丁'), file('无码补丁\\patch.exe')
     ]);
@@ -23,10 +23,11 @@ describe('game setup detection', () => {
   });
 
   it('recognizes a localized BGI launcher without treating it as a helper', () => {
-    const result = classifyGameSetup('G:\\GalGame\\樱之诗\\BGI.exe', [file('BGI.exe'), file('BGI.chs.exe'), directory('SaveData'), directory('汉化补丁')]);
+    const result = classifyGameSetup('G:\\GalGame\\樱之诗\\BGI.exe', [file('BGI.exe'), file('BGI.chs.exe'), file('原版备份\\BGI.exe'), file('补丁\\BGI.chs.exe'), directory('SaveData'), directory('汉化补丁')]);
 
     assert.equal(result.engine, 'BGI / Buriko');
     assert.equal(result.suggestedCategory, 'Galgame');
     assert.ok(result.alternativeExecutables.some((item) => item.endsWith('BGI.chs.exe')));
+    assert.equal(result.alternativeExecutables.length, 1);
   });
 });

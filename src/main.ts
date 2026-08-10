@@ -100,7 +100,8 @@ function readPreferences(): AppPreferences {
   const preferenceStore = requireStore();
   return {
     theme: preferenceStore.getSetting('appearance.theme') === 'light' ? 'light' : 'dark',
-    safeView: preferenceStore.getSetting('privacy.safeView') === 'true'
+    safeView: preferenceStore.getSetting('privacy.safeView') === 'true',
+    sidebarCollapsed: preferenceStore.getSetting('appearance.sidebarCollapsed') === 'true'
   };
 }
 
@@ -251,10 +252,11 @@ function registerIpc(): void {
 
   ipcMain.handle('preferences:save', (event, preferences: AppPreferences) => {
     assertTrusted(event);
-    if (!preferences || !['dark', 'light'].includes(preferences.theme) || typeof preferences.safeView !== 'boolean') throw new Error('无效的应用设置');
+    if (!preferences || !['dark', 'light'].includes(preferences.theme) || typeof preferences.safeView !== 'boolean' || typeof preferences.sidebarCollapsed !== 'boolean') throw new Error('无效的应用设置');
     const preferenceStore = requireStore();
     preferenceStore.setSetting('appearance.theme', preferences.theme);
     preferenceStore.setSetting('privacy.safeView', String(preferences.safeView));
+    preferenceStore.setSetting('appearance.sidebarCollapsed', String(preferences.sidebarCollapsed));
     return readPreferences();
   });
 

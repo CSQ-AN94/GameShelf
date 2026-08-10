@@ -400,7 +400,7 @@ export function App() {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<LibraryFilter>('home');
   const [search, setSearch] = useState('');
-  const [preferences, setPreferences] = useState<AppPreferences>({ theme: 'dark', safeView: false });
+  const [preferences, setPreferences] = useState<AppPreferences>({ theme: 'dark', safeView: false, sidebarCollapsed: false });
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
   const [creatingCollection, setCreatingCollection] = useState(false);
@@ -513,15 +513,15 @@ export function App() {
   }
 
   function navItem(value: LibraryFilter, icon: IconName, label: string) {
-    return <button className={filter === value && !selected ? 'nav-item active' : 'nav-item'} onClick={() => { setFilter(value); setSelectedId(null); }}><Icon name={icon} />{label}</button>;
+    return <button className={filter === value && !selected ? 'nav-item active' : 'nav-item'} title={label} onClick={() => { setFilter(value); setSelectedId(null); }}><Icon name={icon} />{label}</button>;
   }
 
   const showLibrary = search.trim() !== '' || (filter !== 'home' && filter !== 'settings');
 
   return (
-    <div className="app-shell">
+    <div className={preferences.sidebarCollapsed ? 'app-shell sidebar-collapsed' : 'app-shell'}>
       <aside className="sidebar">
-        <label className="sidebar-search"><Icon name="search" /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="搜索游戏" /></label>
+        <div className="sidebar-top"><label className="sidebar-search"><Icon name="search" /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="搜索游戏" /></label><button className="sidebar-collapse" title={preferences.sidebarCollapsed ? '展开侧栏' : '收起侧栏'} aria-label={preferences.sidebarCollapsed ? '展开侧栏' : '收起侧栏'} onClick={() => void savePreferences({ ...preferences, sidebarCollapsed: !preferences.sidebarCollapsed })}><Icon name="list" /></button></div>
         <nav className="sidebar-nav">
           {navItem('home', 'home', '主页')}
           <p className="nav-heading">游戏库</p>

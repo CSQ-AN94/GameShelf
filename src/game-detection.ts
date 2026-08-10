@@ -4,7 +4,7 @@ import type { GameSetupAnalysis, GameType } from './shared';
 
 export type ScannedEntry = { relativePath: string; isDirectory: boolean };
 
-const ignoredExecutable = /(?:unins|uninstall|crashhandler|pythonw?|zsync|dxwebsetup|userconf|config|setup|patch|update|part\d)/i;
+const ignoredExecutable = /(?:unins|uninstall|crashhandler|pythonw?|zsync|dxwebsetup|userconf|config|setup|patch|update|part\d|delfile|ファイル破損|セーブデータフォルダ|(?:^|\/)(?:lib|补丁|原版备份|备份|全cg存档)(?:\/|$))/i;
 
 async function scanDirectory(root: string): Promise<ScannedEntry[]> {
   const entries: ScannedEntry[] = [];
@@ -34,7 +34,7 @@ export function classifyGameSetup(executablePath: string, entries: ScannedEntry[
   let engine: string | null = null;
   if (hasFile(/(?:^|\/)www\/data\/system\.json$/)) engine = 'RPG Maker MV/MZ';
   else if (hasDirectory(/(?:^|\/)renpy(?:\/|$)/)) engine = 'Ren\'Py';
-  else if (hasFile(/(?:^|\/)unityplayer\.dll$/)) engine = 'Unity';
+  else if (hasFile(/(?:^|\/)(?:unityplayer\.dll|gameassembly\.dll)$/) || hasDirectory(/_data$/)) engine = 'Unity';
   else if (hasFile(/(?:^|\/)bgi(?:\.chs)?\.exe$/)) engine = 'BGI / Buriko';
   else if (hasFile(/\.xp3$/)) engine = 'Kirikiri';
 
@@ -50,7 +50,7 @@ export function classifyGameSetup(executablePath: string, entries: ScannedEntry[
 
   const root = pathApi.dirname(executablePath);
   const alternativeExecutables = files
-    .filter((entry) => entry.normalized.endsWith('.exe') && !ignoredExecutable.test(path.basename(entry.relativePath)))
+    .filter((entry) => entry.normalized.endsWith('.exe') && !ignoredExecutable.test(entry.normalized))
     .map((entry) => pathApi.join(root, entry.relativePath))
     .filter((candidate) => pathApi.resolve(candidate).toLocaleLowerCase() !== pathApi.resolve(executablePath).toLocaleLowerCase())
     .slice(0, 8);
