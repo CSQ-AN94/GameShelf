@@ -39,10 +39,6 @@ const mockGames = [
   { title: '雾中庭院', meta: '未开始', tone: 'garden' }
 ] as const;
 
-function TrafficLights() {
-  return <div className="traffic-lights" aria-hidden="true"><i /><i /><i /></div>;
-}
-
 function Cover({ game, square = false }: { game: typeof mockGames[number]; square?: boolean }) {
   return (
     <div className={`mock-cover ${game.tone} ${square ? 'square' : ''}`}>
@@ -57,24 +53,24 @@ function TvVariant() {
   return (
     <div className="prototype-page tv-page">
       <aside className="tv-sidebar">
-        <TrafficLights />
-        <div className="tv-brand">GameShelf</div>
+        <div className="tv-brand"><span>G</span><div><strong>GameShelf</strong><small>本地游戏库</small></div></div>
         <button className="tv-search"><Icon name="search" />搜索</button>
         <nav>
-          <button className="selected"><Icon name="home" />首页</button>
-          <button><Icon name="library" />资料库</button>
+          <button className="selected"><Icon name="home" />游戏首页</button>
+          <button><Icon name="library" />全部游戏</button>
           <button><Icon name="clock" />最近游玩</button>
           <button><Icon name="heart" />收藏</button>
         </nav>
-        <p>分类</p>
+        <p>游戏类型</p>
         <nav>
-          <button><span className="nav-dot blue" />视觉小说</button>
-          <button><span className="nav-dot amber" />角色扮演</button>
+          <button><span className="nav-dot blue" />Galgame</button>
+          <button><span className="nav-dot amber" />R18 游戏</button>
           <button><span className="nav-dot moss" />其他游戏</button>
         </nav>
         <div className="tv-sidebar-bottom">
+          <button><Icon name="plus" />添加游戏</button>
           <button><Icon name="shield" />安全视图<span className="native-switch" /></button>
-          <div className="local-only"><span>KS</span><div><b>本地资料库</b><small>所有记录仅在此电脑</small></div></div>
+          <div className="local-only"><span>KS</span><div><b>本地模式</b><small>资料不会自动上传</small></div></div>
         </div>
       </aside>
 
@@ -83,34 +79,36 @@ function TvVariant() {
           <img src={heroArt} alt="虚构游戏《潮汐以北》的海边车站主视觉" />
           <div className="tv-hero-shade" />
           <div className="tv-hero-copy">
-            <span className="tv-category">正在游玩</span>
+            <span className="tv-category">上次游玩：今天 18:42</span>
             <h1>潮汐以北</h1>
             <p className="tv-jp">潮の向こうに、君がいる。</p>
             <p className="tv-synopsis">海边小城的最后一个夏天。沿着废弃铁路，找回一封从未寄出的信。</p>
+            <div className="tv-tags"><span>视觉小说</span><span>R18</span><span>汉化</span></div>
             <div className="tv-actions">
               <button className="white-action"><Icon name="play" fill />继续游玩</button>
-              <button className="round-action" aria-label="添加到收藏"><Icon name="plus" /></button>
+              <button className="launch-profile-action"><Icon name="gamepad" />汉化版 <b>⌄</b></button>
               <button className="round-action" aria-label="更多选项"><Icon name="more" /></button>
             </div>
           </div>
-          <span className="hero-progress"><i /></span>
+          <div className="hero-game-state">
+            <div className="hero-progress-state"><small>主线进度</small><strong>38%</strong><span><i /></span></div>
+            <div><small>当前路线</small><strong>七海路线 · 第二章</strong></div>
+            <div><small>Mod</small><strong>2 个已启用</strong></div>
+            <div><small>最近存档</small><strong>今天 20:24</strong></div>
+          </div>
         </section>
 
         <div className="tv-shelves">
           <section>
             <header><h2>继续游玩</h2><button>查看全部</button></header>
             <div className="landscape-row">
-              <article className="landscape-card featured" style={{ backgroundImage: `url(${heroArt})` }}>
-                <button aria-label="继续游玩潮汐以北"><Icon name="play" fill /></button>
-                <div><strong>潮汐以北</strong><small>第二章 · 海风与旧站台</small></div>
-                <span><i /></span>
-              </article>
-              <article className="landscape-card abstract-a"><div><strong>NOCTURNE</strong><small>上次游玩：昨天</small></div><span><i /></span></article>
-              <article className="landscape-card abstract-b"><div><strong>夏末回声</strong><small>完成度 74%</small></div><span><i /></span></article>
+              <article className="landscape-card abstract-a"><div><strong>NOCTURNE</strong><small>上次游玩：昨天 · 6.8 小时</small></div><span><i /></span></article>
+              <article className="landscape-card abstract-b"><div><strong>夏末回声</strong><small>七海路线 · 完成度 74%</small></div><span><i /></span></article>
+              <article className="landscape-card abstract-c"><div><strong>雾中庭院</strong><small>上次游玩：5 天前 · 原版</small></div><span><i /></span></article>
             </div>
           </section>
           <section>
-            <header><h2>最近加入</h2><button>资料库</button></header>
+            <header className="library-heading"><div><h2>游戏库</h2><span>24 个本地游戏</span></div><div><button className="selected">全部</button><button>游玩中</button><button>最近加入</button></div></header>
             <div className="tv-poster-row">
               {mockGames.map((game) => <article key={game.title}><Cover game={game} /><strong>{game.title}</strong><small>{game.meta}</small></article>)}
             </div>
@@ -125,7 +123,6 @@ function MusicVariant() {
   return (
     <div className="prototype-page music-page">
       <aside className="music-sidebar">
-        <TrafficLights />
         <label className="music-search"><Icon name="search" /><input placeholder="搜索" /></label>
         <nav>
           <p>GameShelf</p>
@@ -175,7 +172,6 @@ function WorkVariant() {
   return (
     <div className="prototype-page work-page">
       <aside className="work-sidebar">
-        <TrafficLights />
         <div className="work-brand"><span>G</span><strong>GameShelf</strong></div>
         <nav><button className="selected"><Icon name="library" />游戏库</button><button><Icon name="clock" />活动</button><button><Icon name="shield" />安全视图</button></nav>
         <div className="work-bottom"><button><Icon name="settings" />设置</button><span>本地模式</span></div>
@@ -211,9 +207,9 @@ function WorkVariant() {
 }
 
 const variants: { id: Variant; label: string; hint: string }[] = [
-  { id: 'A', label: 'Apple TV', hint: '沉浸首页' },
-  { id: 'B', label: 'Apple Music', hint: '资料库' },
-  { id: 'C', label: 'Steam × Luna', hint: '管理台' }
+  { id: 'A', label: '沉浸游戏首页', hint: '当前方向' },
+  { id: 'B', label: '明亮资料库', hint: '参考方案' },
+  { id: 'C', label: '游戏管理台', hint: '参考方案' }
 ];
 
 export function UIPrototype() {

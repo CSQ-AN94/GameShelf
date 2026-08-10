@@ -12,10 +12,6 @@
 .ui-prototype button { color: inherit; }
 .proto-icon { width: 18px; height: 18px; flex: 0 0 auto; }
 .prototype-page { width: 100%; height: 100%; }
-.traffic-lights { display: flex; gap: 8px; height: 14px; }
-.traffic-lights i { width: 12px; height: 12px; border-radius: 50%; background: #ff5f57; box-shadow: inset 0 0 0 1px rgba(0,0,0,.12); }
-.traffic-lights i:nth-child(2) { background: #febc2e; }
-.traffic-lights i:nth-child(3) { background: #28c840; }
 
 .variant-switcher {
   position: fixed;
@@ -43,7 +39,7 @@
 .variant-switcher button small { color: #8d8d93; font-size: 9px; font-weight: 500; }
 .variant-switcher em { padding: 0 9px 0 5px; color: #77777d; font-size: 9px; font-style: normal; }
 
-/* A — content-first, Apple TV inspired */
+/* A — immersive, game-first home */
 .tv-page { position: relative; overflow-y: auto; background: #050506; color: #f5f5f7; }
 .tv-sidebar {
   position: fixed;
@@ -59,8 +55,11 @@
   box-shadow: 0 18px 60px rgba(0,0,0,.32);
   backdrop-filter: blur(34px) saturate(1.25);
 }
-.tv-sidebar .traffic-lights { margin: 0 8px 22px; }
-.tv-brand { padding: 0 9px 16px; font-size: 20px; font-weight: 720; letter-spacing: -.035em; }
+.tv-brand { display: flex; align-items: center; gap: 10px; padding: 1px 8px 18px; }
+.tv-brand > span { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 10px; background: rgba(255,255,255,.92); color: #101114; font-size: 13px; font-weight: 850; box-shadow: 0 8px 22px rgba(0,0,0,.26); }
+.tv-brand strong, .tv-brand small { display: block; }
+.tv-brand strong { font-size: 15px; font-weight: 720; letter-spacing: -.035em; }
+.tv-brand small { margin-top: 2px; color: rgba(255,255,255,.38); font-size: 8px; }
 .tv-search { display: flex; align-items: center; gap: 8px; width: 100%; height: 32px; padding: 0 9px; border: 1px solid rgba(255,255,255,.09); border-radius: 8px; background: rgba(255,255,255,.07); color: rgba(255,255,255,.56); font-size: 12px; text-align: left; }
 .tv-search .proto-icon { width: 14px; }
 .tv-sidebar nav { display: grid; gap: 2px; margin-top: 12px; }
@@ -85,31 +84,45 @@
 .tv-hero { position: relative; height: min(72vh, 660px); min-height: 520px; overflow: hidden; }
 .tv-hero > img { width: 100%; height: 100%; object-fit: cover; object-position: center; }
 .tv-hero-shade { position: absolute; inset: 0; background: linear-gradient(90deg, rgba(2,4,7,.8) 0, rgba(2,4,7,.32) 38%, transparent 68%), linear-gradient(0deg, #050506 0, transparent 32%, rgba(0,0,0,.08) 100%); }
-.tv-hero-copy { position: absolute; left: 278px; bottom: 98px; max-width: 460px; text-shadow: 0 2px 22px rgba(0,0,0,.58); }
+.tv-hero-copy { position: absolute; left: 278px; bottom: 148px; max-width: 500px; text-shadow: 0 2px 22px rgba(0,0,0,.58); }
 .tv-category { display: inline-flex; align-items: center; gap: 7px; color: rgba(255,255,255,.74); font-size: 11px; font-weight: 650; }
 .tv-category::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: #32d74b; box-shadow: 0 0 12px rgba(50,215,75,.45); }
 .tv-hero-copy h1 { margin: 10px 0 0; font-family: "Songti SC", "STSong", serif; font-size: clamp(52px, 6.4vw, 88px); font-weight: 700; line-height: .95; letter-spacing: -.08em; }
 .tv-jp { margin: 13px 0 0; color: rgba(255,255,255,.72); font-family: "Yu Mincho", serif; font-size: 13px; letter-spacing: .12em; }
-.tv-synopsis { max-width: 390px; margin: 15px 0 19px; color: rgba(255,255,255,.76); font-size: 12px; line-height: 1.65; }
-.tv-actions { display: flex; gap: 9px; }
+.tv-synopsis { max-width: 410px; margin: 15px 0 12px; color: rgba(255,255,255,.76); font-size: 12px; line-height: 1.65; }
+.tv-tags { display: flex; gap: 6px; margin-bottom: 17px; }
+.tv-tags span { padding: 4px 7px; border: 1px solid rgba(255,255,255,.14); border-radius: 6px; background: rgba(22,24,27,.28); color: rgba(255,255,255,.66); font-size: 8px; backdrop-filter: blur(14px); }
+.tv-actions { display: flex; align-items: center; gap: 9px; }
 .tv-actions button { display: inline-flex; align-items: center; justify-content: center; height: 38px; border: 0; cursor: pointer; }
 .white-action { gap: 7px; padding: 0 18px; border-radius: 10px; background: #fff; color: #101012 !important; font-size: 12px; font-weight: 700; box-shadow: 0 6px 25px rgba(0,0,0,.26); }
 .white-action .proto-icon { width: 14px; }
+.launch-profile-action { gap: 7px; padding: 0 13px; border: 1px solid rgba(255,255,255,.18) !important; border-radius: 10px; background: rgba(33,34,37,.58); color: rgba(255,255,255,.88); font-size: 10px; backdrop-filter: blur(18px); }
+.launch-profile-action .proto-icon { width: 14px; }
+.launch-profile-action b { margin-left: 2px; color: rgba(255,255,255,.5); font-size: 9px; }
 .round-action { width: 38px; border: 1px solid rgba(255,255,255,.18) !important; border-radius: 50%; background: rgba(33,34,37,.58); backdrop-filter: blur(18px); }
 .round-action .proto-icon { width: 16px; }
-.hero-progress { position: absolute; right: 22px; bottom: 72px; width: 56px; height: 2px; background: rgba(255,255,255,.3); }
-.hero-progress i { display: block; width: 42%; height: 100%; background: white; }
-.tv-shelves { position: relative; margin-top: -55px; padding: 0 34px 110px 278px; }
+.hero-game-state { position: absolute; right: 34px; bottom: 24px; left: 278px; display: grid; grid-template-columns: 1.1fr 1.35fr 1fr 1fr; min-height: 74px; overflow: hidden; border: 1px solid rgba(255,255,255,.12); border-radius: 14px; background: rgba(19,21,24,.58); box-shadow: 0 16px 45px rgba(0,0,0,.2); backdrop-filter: blur(26px) saturate(1.18); }
+.hero-game-state > div { display: flex; flex-direction: column; justify-content: center; min-width: 0; padding: 13px 17px; border-left: 1px solid rgba(255,255,255,.08); }
+.hero-game-state > div:first-child { border-left: 0; }
+.hero-game-state small, .hero-game-state strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hero-game-state small { color: rgba(255,255,255,.43); font-size: 8px; }
+.hero-game-state strong { margin-top: 5px; color: rgba(255,255,255,.88); font-size: 10px; font-weight: 620; }
+.hero-progress-state { position: relative; }
+.hero-progress-state > span { position: absolute; right: 17px; bottom: 13px; left: 17px; height: 2px; overflow: hidden; border-radius: 2px; background: rgba(255,255,255,.18); }
+.hero-progress-state > span i { display: block; width: 38%; height: 100%; background: #32d74b; }
+.tv-shelves { position: relative; padding: 28px 34px 110px 278px; }
 .tv-shelves section + section { margin-top: 31px; }
 .tv-shelves section > header { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 12px; }
 .tv-shelves h2 { margin: 0; font-size: 19px; letter-spacing: -.03em; }
 .tv-shelves header button { border: 0; background: none; color: rgba(255,255,255,.48); font-size: 10px; cursor: pointer; }
-.landscape-row { display: grid; grid-template-columns: 1.35fr 1fr 1fr; gap: 13px; }
+.landscape-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 13px; }
 .landscape-card { position: relative; min-width: 0; aspect-ratio: 16 / 8.5; overflow: hidden; border-radius: 13px; background-position: center; background-size: cover; box-shadow: 0 10px 30px rgba(0,0,0,.28); }
 .landscape-card::after { content: ''; position: absolute; inset: 0; background: linear-gradient(0deg, rgba(2,3,5,.82), transparent 70%); }
 .landscape-card.abstract-a { background: radial-gradient(circle at 72% 30%, #d6d1bb 0 2%, transparent 2.5%), linear-gradient(145deg, #1d2833, #0b0e15 70%); }
 .landscape-card.abstract-a::before { content: ''; position: absolute; width: 36%; height: 120%; left: 18%; top: -20%; border: 1px solid rgba(218,225,226,.22); transform: rotate(18deg); }
 .landscape-card.abstract-b { background: linear-gradient(160deg, #bd9e79 0 28%, #677a76 28% 32%, #1c3135 32% 100%); }
+.landscape-card.abstract-c { background: radial-gradient(circle at 72% 36%, rgba(205,228,216,.48) 0 3%, transparent 3.4%), linear-gradient(138deg, #576c61, #192520 58%, #101513); }
+.landscape-card.abstract-c::before { content: ''; position: absolute; width: 65%; height: 1px; top: 42%; left: 18%; background: rgba(227,237,230,.2); box-shadow: 0 18px rgba(227,237,230,.1), 0 -18px rgba(227,237,230,.08); transform: rotate(-11deg); }
 .landscape-card > button { position: absolute; z-index: 2; top: 13px; right: 13px; display: grid; place-items: center; width: 32px; height: 32px; border: 0; border-radius: 50%; background: rgba(255,255,255,.9); color: #111; opacity: 0; cursor: pointer; transition: opacity .18s ease; }
 .landscape-card:hover > button { opacity: 1; }
 .landscape-card > button .proto-icon { width: 13px; }
@@ -124,6 +137,11 @@
 .tv-poster-row article > strong, .tv-poster-row article > small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tv-poster-row article > strong { margin-top: 8px; font-size: 11px; }
 .tv-poster-row article > small { margin-top: 3px; color: rgba(255,255,255,.4); font-size: 8px; }
+.library-heading > div { display: flex; align-items: baseline; gap: 9px; }
+.library-heading > div:first-child span { color: rgba(255,255,255,.35); font-size: 9px; }
+.tv-shelves .library-heading > div:last-child { align-items: center; gap: 3px; padding: 3px; border: 1px solid rgba(255,255,255,.08); border-radius: 9px; background: rgba(255,255,255,.035); }
+.tv-shelves .library-heading > div:last-child button { padding: 5px 9px; border-radius: 6px; }
+.tv-shelves .library-heading > div:last-child button.selected { background: rgba(255,255,255,.12); color: rgba(255,255,255,.9); }
 
 .mock-cover { position: relative; display: flex; flex-direction: column; justify-content: flex-end; aspect-ratio: 2 / 3; overflow: hidden; padding: 12px; border-radius: 11px; background: #233241; color: white; box-shadow: 0 8px 25px rgba(0,0,0,.2); }
 .mock-cover::before, .mock-cover::after { content: ''; position: absolute; pointer-events: none; }
@@ -148,7 +166,6 @@
 /* B — Apple Music inspired library */
 .music-page { display: grid; grid-template-columns: 205px minmax(0, 1fr); background: #f4f4f6; color: #1d1d1f; }
 .music-sidebar { display: flex; flex-direction: column; padding: 17px 12px 19px; border-right: 1px solid rgba(0,0,0,.08); background: rgba(228,228,231,.76); backdrop-filter: blur(30px) saturate(1.15); }
-.music-sidebar .traffic-lights { margin: 0 6px 22px; }
 .music-search { display: flex; align-items: center; gap: 6px; height: 30px; padding: 0 8px; border: 1px solid rgba(0,0,0,.09); border-radius: 7px; background: rgba(255,255,255,.55); color: #77777d; }
 .music-search .proto-icon { width: 14px; }
 .music-search input { min-width: 0; width: 100%; border: 0; outline: 0; background: none; color: #1d1d1f; font-size: 11px; }
@@ -208,7 +225,6 @@
 /* C — Steam/Luna inspired operator view */
 .work-page { display: grid; grid-template-columns: 154px 250px minmax(0, 1fr); background: #0e1114; color: #ebedef; }
 .work-sidebar { display: flex; flex-direction: column; padding: 17px 10px 14px; border-right: 1px solid #262a2e; background: #111519; }
-.work-sidebar .traffic-lights { margin: 0 7px 24px; }
 .work-brand { display: flex; align-items: center; gap: 8px; padding: 0 7px 18px; }
 .work-brand > span { display: grid; place-items: center; width: 25px; height: 25px; border-radius: 8px; background: #e8eaec; color: #15181b; font-size: 12px; font-weight: 850; }
 .work-brand strong { font-size: 12px; letter-spacing: -.02em; }
