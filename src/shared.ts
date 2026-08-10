@@ -69,6 +69,7 @@ export interface GameSettingsInput {
   wishlist: boolean;
   hideInSafeView: boolean;
   coverSourcePath?: string | null;
+  backgroundSourcePath?: string | null;
 }
 
 export interface PickedImage {
@@ -124,6 +125,7 @@ export interface GameShelfApi {
   pickExecutable: () => Promise<string | null>;
   analyzeExecutable: (executablePath: string) => Promise<GameSetupAnalysis>;
   pickCover: () => Promise<PickedImage | null>;
+  pickBackground: () => Promise<PickedImage | null>;
   launchGame: (id: string, profileId?: string) => Promise<void>;
   listCollections: () => Promise<GameCollection[]>;
   createCollection: (name: string) => Promise<GameCollection>;

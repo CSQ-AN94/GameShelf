@@ -398,7 +398,12 @@ function GameSettingsDialog({ game, onClose, onChanged }: { game: Game; onClose:
   const [hideInSafeView, setHideInSafeView] = useState(game.hideInSafeView);
   const [coverSourcePath, setCoverSourcePath] = useState<string | null>(null);
   const [coverPreview, setCoverPreview] = useState(game.coverDataUrl ?? null);
+  const [backgroundSourcePath, setBackgroundSourcePath] = useState<string | null>(null);
+  const [backgroundPreview, setBackgroundPreview] = useState(game.backgroundDataUrl ?? null);
   const [profiles, setProfiles] = useState<LaunchProfileDraft[]>(game.launchProfiles);
+  const [pane, setPane] = useState<'overview' | 'launch'>('overview');
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
   const [error, setError] = useState('');
 
   useEffect(() => setProfiles(game.launchProfiles), [game.launchProfiles]);
@@ -412,6 +417,15 @@ function GameSettingsDialog({ game, onClose, onChanged }: { game: Game; onClose:
     if (!selected) return;
     setCoverSourcePath(selected.path);
     setCoverPreview(selected.dataUrl);
+    setSaved(false);
+  }
+
+  async function chooseBackground() {
+    const selected = await window.gameshelf.pickBackground();
+    if (!selected) return;
+    setBackgroundSourcePath(selected.path);
+    setBackgroundPreview(selected.dataUrl);
+    setSaved(false);
   }
 
   async function chooseExecutable(id: string) {
@@ -422,10 +436,14 @@ function GameSettingsDialog({ game, onClose, onChanged }: { game: Game; onClose:
   async function saveGeneral(event: FormEvent) {
     event.preventDefault();
     setError('');
+    setSaving(true);
     try {
-      onChanged(await window.gameshelf.updateGameSettings(game.id, { title, wishlist, hideInSafeView, coverSourcePath }));
+      onChanged(await window.gameshelf.updateGameSettings(game.id, { title, wishlist, hideInSafeView, coverSourcePath, backgroundSourcePath }));
       setCoverSourcePath(null);
+      setBackgroundSourcePath(null);
+      setSaved(true);
     } catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); }
+    finally { setSaving(false); }
   }
 
   async function saveProfile(profile: LaunchProfileDraft, makeDefault = profile.isDefault) {
@@ -460,23 +478,39 @@ function GameSettingsDialog({ game, onClose, onChanged }: { game: Game; onClose:
 
   return (
     <div className="modal-backdrop"><section className="modal game-settings-modal" role="dialog" aria-modal="true" aria-labelledby="game-settings-title">
-      <header className="modal-header"><div><span className="eyebrow">{game.title}</span><h2 id="game-settings-title">游戏设置</h2></div><button className="close-button" onClick={onClose}>×</button></header>
+      <header className="game-settings-visual">
+        <button className={backgroundPreview ? 'settings-background' : 'settings-background empty'} type="button" onClick={chooseBackground} aria-label="更换横向背景图">
+          {backgroundPreview ? <img src={backgroundPreview} alt="横向背景预览" /> : <span className="artwork-placeholder">横向背景</span>}
+          <span className="artwork-action"><Icon name="plus" /><span><strong>更换横向背景</strong><small>用于主页与游戏详情页</small></span></span>
+        </button>
+        <div className="game-settings-visual-shade" />
+        <button className="settings-cover" type="button" onClick={chooseCover} aria-label="更换竖版封面">
+          {coverPreview ? <img src={coverPreview} alt="竖版封面预览" /> : <span className="artwork-placeholder">竖版封面</span>}
+          <span className="cover-action">更换封面</span>
+        </button>
+        <div className="game-settings-heading"><span>游戏设置</span><h2 id="game-settings-title">{title || game.title}</h2><p>{game.developer || '本地游戏'}</p></div>
+        <button className="close-button settings-close" onClick={onClose} aria-label="关闭">×</button>
+      </header>
+      <nav className="game-settings-tabs" aria-label="游戏设置栏目"><button className={pane === 'overview' ? 'active' : ''} onClick={() => setPane('overview')}>资料与外观</button><button className={pane === 'launch' ? 'active' : ''} onClick={() => setPane('launch')}>启动项 <span>{profiles.length}</span></button></nav>
       <div className="game-settings-body">
-        <form className="game-general-settings" onSubmit={saveGeneral}>
-          <button className="settings-cover" type="button" onClick={chooseCover}>{coverPreview ? <img src={coverPreview} alt="封面预览" /> : <span>选择封面</span>}</button>
-          <div className="form-fields"><label>显示名称<input value={title} onChange={(event) => setTitle(event.target.value)} /></label><div className="settings-checks"><label><input type="checkbox" checked={wishlist} onChange={(event) => setWishlist(event.target.checked)} />加入欲玩清单</label><label><input type="checkbox" checked={hideInSafeView} onChange={(event) => setHideInSafeView(event.target.checked)} />安全视图中隐藏</label></div><button className="primary-button settings-save" type="submit">保存基本设置</button></div>
-        </form>
-        <section className="launch-settings"><header><div><h3>启动项</h3><p>为原版、汉化版或补丁版分别选择 exe；默认项用于顶部的“开始游玩”。</p></div><button className="settings-action" onClick={addProfile}><Icon name="plus" />添加启动项</button></header>
+        {pane === 'overview' ? <form id="game-general-form" className="game-general-settings" onSubmit={saveGeneral}>
+          <section className="settings-surface"><header><span>基本资料</span><p>这些内容只保存在你的电脑上。</p></header><label className="settings-field">显示名称<input value={title} onChange={(event) => { setTitle(event.target.value); setSaved(false); }} /></label></section>
+          <section className="settings-surface"><header><span>书库行为</span><p>分别控制计划列表与安全视图。</p></header><div className="settings-toggle-list">
+            <label className="setting-toggle-row"><span><strong>加入欲玩清单</strong><small>在侧栏的欲玩清单中显示</small></span><input type="checkbox" checked={wishlist} onChange={(event) => { setWishlist(event.target.checked); setSaved(false); }} /><i /></label>
+            <label className="setting-toggle-row"><span><strong>安全视图中隐藏</strong><small>开启安全视图时隐藏标题、图片和记录</small></span><input type="checkbox" checked={hideInSafeView} onChange={(event) => { setHideInSafeView(event.target.checked); setSaved(false); }} /><i /></label>
+          </div></section>
+          <section className="artwork-note"><Icon name="book" /><div><strong>两套图片，各司其职</strong><p>竖版封面用于书库卡片；横向背景用于主页主视觉和游戏详情。点击上方图片即可随时替换。</p></div></section>
+        </form> : <section className="launch-settings"><header><div><h3>启动项</h3><p>为原版、汉化版或补丁版分别选择 exe；默认项用于“开始游玩”。</p></div><button className="settings-action" onClick={addProfile}><Icon name="plus" />添加启动项</button></header>
           <div className="launch-editors">{profiles.map((profile) => <div className="launch-editor" key={profile.id}>
             <div className="launch-editor-title"><input value={profile.name} onChange={(event) => patchProfile(profile.id, { name: event.target.value })} /><span>{profile.isDefault ? '默认' : ''}</span></div>
             <div className="path-field"><input readOnly value={profile.executablePath} placeholder="选择 .exe 文件" /><button type="button" onClick={() => void chooseExecutable(profile.id)}>选择</button></div>
             <input className="arguments-input" value={profile.launchArguments} onChange={(event) => patchProfile(profile.id, { launchArguments: event.target.value })} placeholder="启动参数（可留空）" />
-            <div className="launch-editor-actions"><button className="secondary-button" onClick={() => void saveProfile(profile)}>保存</button>{!profile.isDefault && !profile.isNew && <button className="secondary-button" onClick={() => void saveProfile(profile, true)}>设为默认</button>}<button className="danger-button" onClick={() => void deleteProfile(profile)}>删除</button></div>
+            <div className="launch-editor-actions"><button type="button" className="secondary-button" onClick={() => void saveProfile(profile)}>保存</button>{!profile.isDefault && !profile.isNew && <button type="button" className="secondary-button" onClick={() => void saveProfile(profile, true)}>设为默认</button>}<button type="button" className="danger-button" onClick={() => void deleteProfile(profile)}>删除</button></div>
           </div>)}</div>
-        </section>
+        </section>}
         {error && <p className="form-error">{error}</p>}
       </div>
-      <footer className="modal-footer settings-footer"><button className="primary-button" onClick={onClose}>完成</button></footer>
+      <footer className="modal-footer settings-footer"><button className="secondary-button" onClick={onClose}>关闭</button>{pane === 'overview' && <button className={saved ? 'primary-button saved' : 'primary-button'} type="submit" form="game-general-form" disabled={saving}>{saving ? '正在保存…' : saved ? '已保存' : '保存更改'}</button>}</footer>
     </section></div>
   );
 }

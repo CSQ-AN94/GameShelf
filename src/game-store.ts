@@ -244,6 +244,15 @@ export class GameStore {
     return this.getGame(id)!;
   }
 
+  setBackgroundPath(id: string, backgroundPath: string): Game {
+    this.database.prepare('UPDATE games SET background_path = ?, updated_at = ? WHERE id = ?').run(
+      backgroundPath,
+      new Date().toISOString(),
+      id
+    );
+    return this.getGame(id)!;
+  }
+
   setStatus(id: string, status: GameStatus): Game {
     const now = new Date().toISOString();
     this.database.prepare(`

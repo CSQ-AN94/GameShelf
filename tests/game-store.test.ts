@@ -46,6 +46,7 @@ describe('GameStore', () => {
     const completed = store.setStatus(game.id, 'completed');
     const categorized = store.setCategory(game.id, '型月系列');
     const configured = store.setGameSettings(game.id, { title: 'Series Entry Remastered', wishlist: true, hideInSafeView: true });
+    const withArtwork = store.setBackgroundPath(game.id, 'C:\\GameShelf\\backgrounds\\series.jpg');
     const withAlternative = store.saveLaunchProfile(game.id, {
       name: '汉化版',
       executablePath: 'C:\\Games\\Series\\Chinese.exe',
@@ -61,6 +62,7 @@ describe('GameStore', () => {
     assert.equal(categorized.category, '型月系列');
     assert.equal(configured.wishlist, true);
     assert.equal(configured.hideInSafeView, true);
+    assert.equal(withArtwork.backgroundPath, 'C:\\GameShelf\\backgrounds\\series.jpg');
     assert.equal(withAlternative.launchProfiles.length, 2);
     assert.equal(withAlternative.launchProfiles[0]?.name, '汉化版');
     assert.equal(withAlternative.executablePath, 'C:\\Games\\Series\\Chinese.exe');

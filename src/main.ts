@@ -68,10 +68,12 @@ async function validateExecutable(executablePath: string): Promise<void> {
   if (!details.isFile()) throw new Error('启动文件不存在');
 }
 
-async function copyCover(gameId: string, sourcePath: string): Promise<string> {
+async function copyArtwork(gameId: string, sourcePath: string, directoryName: 'covers' | 'backgrounds'): Promise<string> {
   const extension = path.extname(sourcePath).toLowerCase();
-  if (!['.jpg', '.jpeg', '.png', '.webp'].includes(extension)) throw new Error('不支持的封面格式');
-  const destinationDirectory = path.join(app.getPath('userData'), 'covers');
+  if (!['.jpg', '.jpeg', '.png', '.webp'].includes(extension)) throw new Error('不支持的图片格式');
+  const details = await stat(sourcePath);
+  if (!details.isFile() || details.size > 12 * 1024 * 1024) throw new Error('图片无效或过大');
+  const destinationDirectory = path.join(app.getPath('userData'), directoryName);
   await mkdir(destinationDirectory, { recursive: true });
   const destination = path.join(destinationDirectory, `${gameId}${extension}`);
   await copyFile(sourcePath, destination);
@@ -146,6 +148,20 @@ function registerIpc(): void {
     return { path: selectedPath, dataUrl };
   });
 
+  ipcMain.handle('games:pick-background', async (event): Promise<PickedImage | null> => {
+    assertTrusted(event);
+    const result = await dialog.showOpenDialog(mainWindow!, {
+      title: '选择横向背景图',
+      properties: ['openFile'],
+      filters: [{ name: 'Images', extensions: ['jpg', 'jpeg', 'png', 'webp'] }]
+    });
+    const selectedPath = result.filePaths[0];
+    if (result.canceled || !selectedPath) return null;
+    const dataUrl = await imageDataUrl(selectedPath);
+    if (!dataUrl) throw new Error('背景图无法读取或文件过大');
+    return { path: selectedPath, dataUrl };
+  });
+
   ipcMain.handle('games:analyze-executable', async (event, executablePath: unknown) => {
     assertTrusted(event);
     if (typeof executablePath !== 'string') throw new Error('请选择启动文件');
@@ -169,7 +185,7 @@ function registerIpc(): void {
       workingDirectory: path.dirname(input.executablePath)
     });
     if (input.coverSourcePath) {
-      const coverPath = await copyCover(game.id, input.coverSourcePath);
+      const coverPath = await copyArtwork(game.id, input.coverSourcePath, 'covers');
       game = requireStore().setCoverPath(game.id, coverPath);
     }
     return hydrateGame(game);
@@ -194,9 +210,11 @@ function registerIpc(): void {
     if (typeof id !== 'string' || !input || typeof input.title !== 'string' || !input.title.trim() || input.title.trim().length > 200) throw new Error('游戏名称无效');
     if (typeof input.wishlist !== 'boolean' || typeof input.hideInSafeView !== 'boolean') throw new Error('游戏设置无效');
     if (input.coverSourcePath != null && (typeof input.coverSourcePath !== 'string' || !path.isAbsolute(input.coverSourcePath))) throw new Error('封面路径无效');
+    if (input.backgroundSourcePath != null && (typeof input.backgroundSourcePath !== 'string' || !path.isAbsolute(input.backgroundSourcePath))) throw new Error('背景图路径无效');
     if (!requireStore().getGame(id)) throw new Error('找不到这个游戏');
     let game = requireStore().setGameSettings(id, input);
-    if (input.coverSourcePath) game = requireStore().setCoverPath(id, await copyCover(id, input.coverSourcePath));
+    if (input.coverSourcePath) game = requireStore().setCoverPath(id, await copyArtwork(id, input.coverSourcePath, 'covers'));
+    if (input.backgroundSourcePath) game = requireStore().setBackgroundPath(id, await copyArtwork(id, input.backgroundSourcePath, 'backgrounds'));
     return hydrateGame(game);
   });
 

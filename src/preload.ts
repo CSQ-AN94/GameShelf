@@ -13,6 +13,7 @@ const api: GameShelfApi = {
   pickExecutable: () => ipcRenderer.invoke('games:pick-executable'),
   analyzeExecutable: (executablePath) => ipcRenderer.invoke('games:analyze-executable', executablePath),
   pickCover: () => ipcRenderer.invoke('games:pick-cover'),
+  pickBackground: () => ipcRenderer.invoke('games:pick-background'),
   launchGame: (id, profileId) => ipcRenderer.invoke('games:launch', id, profileId),
   listCollections: () => ipcRenderer.invoke('collections:list'),
   createCollection: (name) => ipcRenderer.invoke('collections:create', name),
