@@ -31,4 +31,26 @@ describe('GameStore', () => {
     });
     store.close();
   });
+
+  it('persists completion, collections, and profile settings', () => {
+    const store = new GameStore(':memory:');
+    const game = store.createGame({
+      title: 'Series Entry',
+      type: 'visual_novel',
+      contentRating: 'general',
+      executablePath: 'C:\\Games\\Series\\game.exe',
+      workingDirectory: 'C:\\Games\\Series'
+    });
+    const collection = store.createCollection('系列作品');
+
+    const completed = store.setStatus(game.id, 'completed');
+    store.setGameCollections(game.id, [collection.id]);
+    store.setSetting('profile.name', 'Kevin');
+
+    assert.equal(completed.status, 'completed');
+    assert.ok(completed.completedAt);
+    assert.deepEqual(store.listCollections()[0]?.gameIds, [game.id]);
+    assert.equal(store.getSetting('profile.name'), 'Kevin');
+    store.close();
+  });
 });

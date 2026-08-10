@@ -5,7 +5,7 @@ import { app, BrowserWindow, dialog, ipcMain, type IpcMainInvokeEvent } from 'el
 import started from 'electron-squirrel-startup';
 import { GameStore } from './game-store';
 import { parseLaunchArguments } from './launch';
-import type { Game, NewGameInput, PickedImage } from './shared';
+import type { Game, GameStatus, NewGameInput, PickedImage, ProfileInput, UserProfile } from './shared';
 
 declare const MAIN_WINDOW_VITE_DEV_SERVER_URL: string | undefined;
 declare const MAIN_WINDOW_VITE_NAME: string;
@@ -73,6 +73,28 @@ async function copyCover(gameId: string, sourcePath: string): Promise<string> {
   return destination;
 }
 
+async function copyProfileAvatar(sourcePath: string): Promise<string> {
+  const extension = path.extname(sourcePath).toLowerCase();
+  if (!['.jpg', '.jpeg', '.png', '.webp'].includes(extension)) throw new Error('不支持的头像格式');
+  const details = await stat(sourcePath);
+  if (!details.isFile() || details.size > 12 * 1024 * 1024) throw new Error('头像文件无效或过大');
+  const destinationDirectory = path.join(app.getPath('userData'), 'profile');
+  await mkdir(destinationDirectory, { recursive: true });
+  const destination = path.join(destinationDirectory, `avatar${extension}`);
+  await copyFile(sourcePath, destination);
+  return destination;
+}
+
+async function hydrateProfile(): Promise<UserProfile> {
+  const profileStore = requireStore();
+  const avatarPath = profileStore.getSetting('profile.avatarPath');
+  return {
+    name: profileStore.getSetting('profile.name') ?? '玩家',
+    avatarPath,
+    avatarDataUrl: await imageDataUrl(avatarPath)
+  };
+}
+
 function registerIpc(): void {
   ipcMain.handle('games:list', async (event) => {
     assertTrusted(event);
@@ -131,6 +153,13 @@ function registerIpc(): void {
     return hydrateGame(game);
   });
 
+  ipcMain.handle('games:update-status', async (event, id: unknown, status: unknown) => {
+    assertTrusted(event);
+    if (typeof id !== 'string' || !gameStatuses.has(status as string)) throw new Error('无效的游玩状态');
+    if (!requireStore().getGame(id)) throw new Error('找不到这个游戏');
+    return hydrateGame(requireStore().setStatus(id, status as GameStatus));
+  });
+
   ipcMain.handle('games:launch', async (event, id: unknown) => {
     assertTrusted(event);
     if (typeof id !== 'string') throw new Error('Invalid game id');
@@ -151,10 +180,48 @@ function registerIpc(): void {
       store?.recordSession(game.id, startedAt, (Date.now() - startedAt.getTime()) / 1000);
     });
   });
+
+  ipcMain.handle('collections:list', (event) => {
+    assertTrusted(event);
+    return requireStore().listCollections();
+  });
+
+  ipcMain.handle('collections:create', (event, name: unknown) => {
+    assertTrusted(event);
+    if (typeof name !== 'string' || !name.trim()) throw new Error('合集名称不能为空');
+    if (name.trim().length > 80) throw new Error('合集名称过长');
+    return requireStore().createCollection(name);
+  });
+
+  ipcMain.handle('collections:set-game', (event, gameId: unknown, collectionIds: unknown) => {
+    assertTrusted(event);
+    if (typeof gameId !== 'string' || !Array.isArray(collectionIds) || !collectionIds.every((id) => typeof id === 'string')) throw new Error('无效的合集设置');
+    if (!requireStore().getGame(gameId)) throw new Error('找不到这个游戏');
+    const validIds = new Set(requireStore().listCollections().map((collection) => collection.id));
+    if (!(collectionIds as string[]).every((id) => validIds.has(id))) throw new Error('合集不存在');
+    requireStore().setGameCollections(gameId, [...new Set(collectionIds as string[])]);
+  });
+
+  ipcMain.handle('profile:get', (event) => {
+    assertTrusted(event);
+    return hydrateProfile();
+  });
+
+  ipcMain.handle('profile:save', async (event, input: ProfileInput) => {
+    assertTrusted(event);
+    if (!input || typeof input.name !== 'string' || !input.name.trim()) throw new Error('昵称不能为空');
+    if (input.name.trim().length > 40) throw new Error('昵称过长');
+    const profileStore = requireStore();
+    profileStore.setSetting('profile.name', input.name.trim());
+    if (input.avatarSourcePath != null) {
+      if (typeof input.avatarSourcePath !== 'string' || !path.isAbsolute(input.avatarSourcePath)) throw new Error('头像路径无效');
+      profileStore.setSetting('profile.avatarPath', await copyProfileAvatar(input.avatarSourcePath));
+    }
+    return hydrateProfile();
+  });
 }
 
 function createWindow(): void {
-  const prototypeQuery = process.argv.includes('--ui-prototype') ? '?prototype=ui' : '';
   mainWindow = new BrowserWindow({
     width: 1280,
     height: 800,
@@ -175,9 +242,9 @@ function createWindow(): void {
   mainWindow.webContents.on('will-navigate', (event) => event.preventDefault());
 
   if (MAIN_WINDOW_VITE_DEV_SERVER_URL) {
-    void mainWindow.loadURL(`${MAIN_WINDOW_VITE_DEV_SERVER_URL}${prototypeQuery}`);
+    void mainWindow.loadURL(MAIN_WINDOW_VITE_DEV_SERVER_URL);
   } else {
-    void mainWindow.loadFile(path.join(__dirname, `../renderer/${MAIN_WINDOW_VITE_NAME}/index.html`), prototypeQuery ? { query: { prototype: 'ui' } } : undefined);
+    void mainWindow.loadFile(path.join(__dirname, `../renderer/${MAIN_WINDOW_VITE_NAME}/index.html`));
   }
 }
 

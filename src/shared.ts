@@ -22,6 +22,7 @@ export interface Game {
   totalPlaySeconds: number;
   launchCount: number;
   lastPlayedAt: string | null;
+  completedAt: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -43,11 +44,35 @@ export interface PickedImage {
   dataUrl: string;
 }
 
+export interface GameCollection {
+  id: string;
+  name: string;
+  gameIds: string[];
+  createdAt: string;
+}
+
+export interface UserProfile {
+  name: string;
+  avatarPath: string | null;
+  avatarDataUrl?: string | null;
+}
+
+export interface ProfileInput {
+  name: string;
+  avatarSourcePath?: string | null;
+}
+
 export interface GameShelfApi {
   listGames: () => Promise<Game[]>;
   getGame: (id: string) => Promise<Game | null>;
   addGame: (input: NewGameInput) => Promise<Game>;
+  updateGameStatus: (id: string, status: GameStatus) => Promise<Game>;
   pickExecutable: () => Promise<string | null>;
   pickCover: () => Promise<PickedImage | null>;
   launchGame: (id: string) => Promise<void>;
+  listCollections: () => Promise<GameCollection[]>;
+  createCollection: (name: string) => Promise<GameCollection>;
+  setGameCollections: (gameId: string, collectionIds: string[]) => Promise<void>;
+  getProfile: () => Promise<UserProfile>;
+  saveProfile: (input: ProfileInput) => Promise<UserProfile>;
 }
