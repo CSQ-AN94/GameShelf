@@ -6,7 +6,7 @@ import started from 'electron-squirrel-startup';
 import { GameStore } from './game-store';
 import { analyzeExecutable } from './game-detection';
 import { parseLaunchArguments } from './launch';
-import type { AppPreferences, Game, GameStatus, NewGameInput, PickedImage, ProfileInput, UserProfile } from './shared';
+import type { AppPreferences, Game, GameSettingsInput, GameStatus, LaunchProfileInput, NewGameInput, PickedImage, ProfileInput, UserProfile } from './shared';
 
 declare const MAIN_WINDOW_VITE_DEV_SERVER_URL: string | undefined;
 declare const MAIN_WINDOW_VITE_NAME: string;
@@ -53,7 +53,11 @@ async function imageDataUrl(filePath: string | null): Promise<string | null> {
 }
 
 async function hydrateGame(game: Game): Promise<Game> {
-  return { ...game, coverDataUrl: await imageDataUrl(game.coverPath) };
+  const [coverDataUrl, backgroundDataUrl] = await Promise.all([
+    imageDataUrl(game.coverPath),
+    imageDataUrl(game.backgroundPath)
+  ]);
+  return { ...game, coverDataUrl, backgroundDataUrl };
 }
 
 async function validateExecutable(executablePath: string): Promise<void> {
@@ -185,15 +189,44 @@ function registerIpc(): void {
     return hydrateGame(requireStore().setCategory(id, category));
   });
 
-  ipcMain.handle('games:launch', async (event, id: unknown) => {
+  ipcMain.handle('games:update-settings', async (event, id: unknown, input: GameSettingsInput) => {
+    assertTrusted(event);
+    if (typeof id !== 'string' || !input || typeof input.title !== 'string' || !input.title.trim() || input.title.trim().length > 200) throw new Error('游戏名称无效');
+    if (typeof input.wishlist !== 'boolean' || typeof input.hideInSafeView !== 'boolean') throw new Error('游戏设置无效');
+    if (input.coverSourcePath != null && (typeof input.coverSourcePath !== 'string' || !path.isAbsolute(input.coverSourcePath))) throw new Error('封面路径无效');
+    if (!requireStore().getGame(id)) throw new Error('找不到这个游戏');
+    let game = requireStore().setGameSettings(id, input);
+    if (input.coverSourcePath) game = requireStore().setCoverPath(id, await copyCover(id, input.coverSourcePath));
+    return hydrateGame(game);
+  });
+
+  ipcMain.handle('games:save-launch-profile', async (event, gameId: unknown, input: LaunchProfileInput) => {
+    assertTrusted(event);
+    if (typeof gameId !== 'string' || !requireStore().getGame(gameId)) throw new Error('找不到这个游戏');
+    if (!input || (input.id != null && typeof input.id !== 'string') || typeof input.name !== 'string' || !input.name.trim() || input.name.trim().length > 60) throw new Error('启动项名称无效');
+    if (typeof input.executablePath !== 'string' || (input.launchArguments != null && typeof input.launchArguments !== 'string') || typeof input.isDefault !== 'boolean') throw new Error('启动项设置无效');
+    await validateExecutable(input.executablePath);
+    return hydrateGame(requireStore().saveLaunchProfile(gameId, { ...input, workingDirectory: path.dirname(input.executablePath) }));
+  });
+
+  ipcMain.handle('games:delete-launch-profile', async (event, gameId: unknown, profileId: unknown) => {
+    assertTrusted(event);
+    if (typeof gameId !== 'string' || typeof profileId !== 'string') throw new Error('启动项无效');
+    return hydrateGame(requireStore().deleteLaunchProfile(gameId, profileId));
+  });
+
+  ipcMain.handle('games:launch', async (event, id: unknown, profileId: unknown) => {
     assertTrusted(event);
     if (typeof id !== 'string') throw new Error('Invalid game id');
     const game = requireStore().getGame(id);
     if (!game) throw new Error('找不到这个游戏');
-    await validateExecutable(game.executablePath);
+    if (profileId != null && typeof profileId !== 'string') throw new Error('启动项无效');
+    const profile = requireStore().getLaunchProfile(id, profileId as string | undefined);
+    if (!profile) throw new Error('找不到这个启动项');
+    await validateExecutable(profile.executablePath);
     const startedAt = new Date();
-    const child = spawn(game.executablePath, parseLaunchArguments(game.launchArguments), {
-      cwd: game.workingDirectory,
+    const child = spawn(profile.executablePath, parseLaunchArguments(profile.launchArguments), {
+      cwd: profile.workingDirectory,
       windowsHide: false,
       stdio: 'ignore'
     });

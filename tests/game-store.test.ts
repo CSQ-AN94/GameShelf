@@ -32,7 +32,7 @@ describe('GameStore', () => {
     store.close();
   });
 
-  it('persists completion, collections, and profile settings', () => {
+  it('persists completion, wishlist, collections, and launch profiles', () => {
     const store = new GameStore(':memory:');
     const game = store.createGame({
       title: 'Series Entry',
@@ -45,12 +45,25 @@ describe('GameStore', () => {
 
     const completed = store.setStatus(game.id, 'completed');
     const categorized = store.setCategory(game.id, '型月系列');
+    const configured = store.setGameSettings(game.id, { title: 'Series Entry Remastered', wishlist: true, hideInSafeView: true });
+    const withAlternative = store.saveLaunchProfile(game.id, {
+      name: '汉化版',
+      executablePath: 'C:\\Games\\Series\\Chinese.exe',
+      workingDirectory: 'C:\\Games\\Series',
+      launchArguments: '--fullscreen',
+      isDefault: true
+    });
     store.setGameCollections(game.id, [collection.id]);
     store.setSetting('profile.name', 'Kevin');
 
     assert.equal(completed.status, 'completed');
     assert.ok(completed.completedAt);
     assert.equal(categorized.category, '型月系列');
+    assert.equal(configured.wishlist, true);
+    assert.equal(configured.hideInSafeView, true);
+    assert.equal(withAlternative.launchProfiles.length, 2);
+    assert.equal(withAlternative.launchProfiles[0]?.name, '汉化版');
+    assert.equal(withAlternative.executablePath, 'C:\\Games\\Series\\Chinese.exe');
     assert.deepEqual(store.listCollections()[0]?.gameIds, [game.id]);
     assert.equal(store.getSetting('profile.name'), 'Kevin');
     store.close();

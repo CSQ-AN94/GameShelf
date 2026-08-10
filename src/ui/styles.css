@@ -230,14 +230,24 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px s
 .detail-copy h1 { margin: 17px 0 5px; font-size: clamp(32px, 4vw, 48px); line-height: 1.05; letter-spacing: -.045em; }
 .detail-developer { margin: 0; color: rgba(255,255,255,.52); font-size: 11px; }
 .detail-description { max-width: 610px; margin: 20px 0 0; color: rgba(255,255,255,.58); font-size: 11px; line-height: 1.75; }
-.detail-actions { display: flex; align-items: center; gap: 8px; margin-top: 19px; }
+.detail-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 19px; }
 .status-select, .collection-button { height: 38px; border: 1px solid rgba(255,255,255,.1); border-radius: 9px; background: rgba(28,31,36,.72); color: rgba(255,255,255,.8); font-size: 9px; }
 .status-select { padding: 0 10px; }
 .collection-button { gap: 6px; padding: 0 11px; }
+.collection-button.active { border-color: rgba(58,153,255,.42); background: rgba(32,140,248,.2); color: #a9d3ff; }
 .collection-button .app-icon { width: 13px; }
-.launch-profile { display: flex; align-items: center; gap: 10px; max-width: 410px; margin-top: 22px; padding: 11px; border: 1px solid rgba(255,255,255,.07); border-radius: 10px; background: rgba(255,255,255,.035); }
+.launch-panel { max-width: 520px; margin-top: 22px; }
+.launch-panel > header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 7px; }
+.launch-panel > header small, .launch-panel > header strong { display: block; }
+.launch-panel > header small { color: rgba(255,255,255,.35); font-size: 8px; }
+.launch-panel > header strong { margin-top: 3px; font-size: 10px; }
+.launch-panel > header button { padding: 6px 9px; border: 0; border-radius: 7px; background: rgba(255,255,255,.08); color: rgba(255,255,255,.72); font-size: 8px; cursor: pointer; }
+.launch-profile { display: flex; align-items: center; gap: 10px; margin-top: 6px; padding: 9px 11px; border: 1px solid rgba(255,255,255,.07); border-radius: 10px; background: rgba(255,255,255,.035); }
 .launch-profile > span { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 7px; background: rgba(255,255,255,.08); color: rgba(255,255,255,.6); }
 .launch-profile .app-icon { width: 14px; }
+.launch-profile > div { min-width: 0; flex: 1; }
+.launch-profile > button { display: flex; align-items: center; gap: 4px; padding: 6px 9px; border: 0; border-radius: 7px; background: rgba(255,255,255,.09); color: rgba(255,255,255,.8); font-size: 8px; cursor: pointer; }
+.launch-profile > button .app-icon { width: 9px; }
 .launch-profile small, .launch-profile strong { display: block; }
 .launch-profile small { color: rgba(255,255,255,.35); font-size: 8px; }
 .launch-profile strong { margin-top: 3px; font-size: 9px; }
@@ -271,6 +281,9 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px s
 .form-fields label { display: flex; flex: 1; flex-direction: column; gap: 6px; color: rgba(255,255,255,.5); font-size: 9px; }
 .form-fields input, .form-fields select { width: 100%; height: 35px; padding: 0 10px; border: 1px solid rgba(255,255,255,.09); border-radius: 8px; outline: 0; background: rgba(6,8,11,.45); color: #f1f2f4; font-size: 11px; }
 .form-row { display: flex; gap: 11px; }
+.settings-checks { display: flex; flex-wrap: wrap; gap: 8px 16px; }
+.settings-checks label { display: flex; flex: 0 0 auto; flex-direction: row; align-items: center; gap: 6px; color: rgba(255,255,255,.65); font-size: 9px; }
+.settings-checks input { width: 14px; height: 14px; accent-color: #208cf8; }
 .path-field { display: flex; gap: 7px; }
 .path-field input { min-width: 0; }
 .path-field button { flex: 0 0 auto; padding: 0 11px; border: 1px solid rgba(255,255,255,.09); border-radius: 8px; background: rgba(255,255,255,.07); font-size: 10px; cursor: pointer; }
@@ -296,6 +309,30 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px s
 .membership-footer { margin: 8px 24px 19px; }
 .category-editor { padding: 20px 24px 0; }
 .category-editor > p { margin: 9px 0 0; color: rgba(255,255,255,.38); font-size: 8px; }
+.game-settings-modal { width: min(760px, 100%); max-height: min(850px, calc(100vh - 48px)); }
+.game-settings-body { max-height: calc(100vh - 190px); padding: 20px 24px 0; overflow-y: auto; }
+.game-general-settings { display: grid; grid-template-columns: 105px 1fr; gap: 18px; padding: 0 0 20px !important; }
+.settings-cover { aspect-ratio: 2 / 3; overflow: hidden; border: 1px dashed rgba(255,255,255,.18); border-radius: 10px; background: rgba(255,255,255,.04); color: rgba(255,255,255,.45); font-size: 9px; cursor: pointer; }
+.settings-cover img { width: 100%; height: 100%; object-fit: cover; }
+.settings-save { align-self: flex-start; width: max-content; }
+.launch-settings { padding: 18px 0 2px; border-top: 1px solid rgba(255,255,255,.07); }
+.launch-settings > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.launch-settings h3 { margin: 0; font-size: 13px; }
+.launch-settings p { margin: 5px 0 0; color: rgba(255,255,255,.4); font-size: 8px; line-height: 1.5; }
+.launch-settings .settings-action { display: flex; align-items: center; gap: 5px; }
+.launch-settings .settings-action .app-icon { width: 11px; }
+.launch-editors { display: flex; flex-direction: column; gap: 8px; margin-top: 13px; }
+.launch-editor { display: grid; grid-template-columns: 150px minmax(200px, 1fr); gap: 8px; padding: 11px; border: 1px solid rgba(255,255,255,.07); border-radius: 10px; background: rgba(255,255,255,.025); }
+.launch-editor input { min-width: 0; height: 33px; padding: 0 9px; border: 1px solid rgba(255,255,255,.09); border-radius: 7px; outline: 0; background: rgba(6,8,11,.42); color: #eef0f3; font-size: 9px; }
+.launch-editor-title { display: flex; align-items: center; gap: 6px; }
+.launch-editor-title input { width: 100%; }
+.launch-editor-title span { color: #69aff7; font-size: 8px; }
+.launch-editor .path-field { min-width: 0; }
+.launch-editor .path-field input { width: 100%; }
+.arguments-input { grid-column: 1 / -1; }
+.launch-editor-actions { grid-column: 1 / -1; display: flex; justify-content: flex-end; gap: 6px; }
+.danger-button { min-height: 34px; padding: 0 12px; border: 1px solid rgba(230,85,105,.2); border-radius: 9px; background: rgba(190,54,75,.09); color: #e99aa8; font-size: 9px; cursor: pointer; }
+.settings-footer { margin: 10px 24px 18px; }
 .toast { position: fixed; z-index: 30; right: 23px; bottom: 22px; max-width: 360px; padding: 10px 14px; border: 1px solid rgba(255,255,255,.11); border-radius: 10px; background: rgba(36,40,46,.92); color: #e7e9ec; font-size: 10px; box-shadow: 0 14px 42px rgba(0,0,0,.45); backdrop-filter: blur(18px); }
 
 :root[data-theme="light"] { color: #202124; background: #f3f3f5; }
@@ -366,6 +403,10 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px s
 [data-theme="light"] .detection-summary strong { color: rgba(0,0,0,.78); }
 [data-theme="light"] .membership-list > p, [data-theme="light"] .membership-list small { color: rgba(0,0,0,.42); }
 [data-theme="light"] .category-editor > p { color: rgba(0,0,0,.42); }
+[data-theme="light"] .settings-checks label, [data-theme="light"] .launch-settings p { color: rgba(0,0,0,.55); }
+[data-theme="light"] .settings-cover, [data-theme="light"] .launch-editor { border-color: rgba(0,0,0,.1); background: rgba(0,0,0,.025); color: rgba(0,0,0,.5); }
+[data-theme="light"] .launch-editor input { border-color: rgba(0,0,0,.1); background: white; color: #202124; }
+[data-theme="light"] .launch-settings { border-color: rgba(0,0,0,.08); }
 [data-theme="light"] .toast { border-color: rgba(0,0,0,.1); background: rgba(250,250,251,.94); color: #202124; box-shadow: 0 14px 42px rgba(0,0,0,.15); }
 
 @media (max-width: 1050px) {
@@ -376,6 +417,7 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px s
   .hero-stats div:nth-child(4) { border-top: 1px solid rgba(255,255,255,.07); }
   .home-hero-copy { bottom: 180px; }
   .detail-content { grid-template-columns: 190px minmax(0, 1fr); padding-inline: 34px; }
+  .launch-editor { grid-template-columns: 125px minmax(180px, 1fr); }
 }
 
 .app-shell.sidebar-collapsed { grid-template-columns: 72px minmax(0, 1fr); }

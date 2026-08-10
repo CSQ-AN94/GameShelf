@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron';
-import type { AppPreferences, GameShelfApi, NewGameInput, ProfileInput } from './shared';
+import type { AppPreferences, GameSettingsInput, GameShelfApi, LaunchProfileInput, NewGameInput, ProfileInput } from './shared';
 
 const api: GameShelfApi = {
   listGames: () => ipcRenderer.invoke('games:list'),
@@ -7,10 +7,13 @@ const api: GameShelfApi = {
   addGame: (input: NewGameInput) => ipcRenderer.invoke('games:add', input),
   updateGameStatus: (id, status) => ipcRenderer.invoke('games:update-status', id, status),
   updateGameCategory: (id, category) => ipcRenderer.invoke('games:update-category', id, category),
+  updateGameSettings: (id, input: GameSettingsInput) => ipcRenderer.invoke('games:update-settings', id, input),
+  saveLaunchProfile: (gameId, input: LaunchProfileInput) => ipcRenderer.invoke('games:save-launch-profile', gameId, input),
+  deleteLaunchProfile: (gameId, profileId) => ipcRenderer.invoke('games:delete-launch-profile', gameId, profileId),
   pickExecutable: () => ipcRenderer.invoke('games:pick-executable'),
   analyzeExecutable: (executablePath) => ipcRenderer.invoke('games:analyze-executable', executablePath),
   pickCover: () => ipcRenderer.invoke('games:pick-cover'),
-  launchGame: (id) => ipcRenderer.invoke('games:launch', id),
+  launchGame: (id, profileId) => ipcRenderer.invoke('games:launch', id, profileId),
   listCollections: () => ipcRenderer.invoke('collections:list'),
   createCollection: (name) => ipcRenderer.invoke('collections:create', name),
   setGameCollections: (gameId, collectionIds) => ipcRenderer.invoke('collections:set-game', gameId, collectionIds),

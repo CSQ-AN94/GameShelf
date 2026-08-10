@@ -14,12 +14,16 @@ export interface Game {
   coverPath: string | null;
   coverDataUrl?: string | null;
   backgroundPath: string | null;
+  backgroundDataUrl?: string | null;
   developer: string;
   releaseDate: string | null;
   languages: string[];
   score: number | null;
   description: string;
   status: GameStatus;
+  wishlist: boolean;
+  hideInSafeView: boolean;
+  launchProfiles: LaunchProfile[];
   totalPlaySeconds: number;
   launchCount: number;
   lastPlayedAt: string | null;
@@ -39,6 +43,32 @@ export interface NewGameInput {
   developer?: string;
   description?: string;
   status?: GameStatus;
+  wishlist?: boolean;
+  hideInSafeView?: boolean;
+}
+
+export interface LaunchProfile {
+  id: string;
+  name: string;
+  executablePath: string;
+  workingDirectory: string;
+  launchArguments: string;
+  isDefault: boolean;
+}
+
+export interface LaunchProfileInput {
+  id?: string;
+  name: string;
+  executablePath: string;
+  launchArguments?: string;
+  isDefault?: boolean;
+}
+
+export interface GameSettingsInput {
+  title: string;
+  wishlist: boolean;
+  hideInSafeView: boolean;
+  coverSourcePath?: string | null;
 }
 
 export interface PickedImage {
@@ -88,10 +118,13 @@ export interface GameShelfApi {
   addGame: (input: NewGameInput) => Promise<Game>;
   updateGameStatus: (id: string, status: GameStatus) => Promise<Game>;
   updateGameCategory: (id: string, category: string) => Promise<Game>;
+  updateGameSettings: (id: string, input: GameSettingsInput) => Promise<Game>;
+  saveLaunchProfile: (gameId: string, input: LaunchProfileInput) => Promise<Game>;
+  deleteLaunchProfile: (gameId: string, profileId: string) => Promise<Game>;
   pickExecutable: () => Promise<string | null>;
   analyzeExecutable: (executablePath: string) => Promise<GameSetupAnalysis>;
   pickCover: () => Promise<PickedImage | null>;
-  launchGame: (id: string) => Promise<void>;
+  launchGame: (id: string, profileId?: string) => Promise<void>;
   listCollections: () => Promise<GameCollection[]>;
   createCollection: (name: string) => Promise<GameCollection>;
   setGameCollections: (gameId: string, collectionIds: string[]) => Promise<void>;
