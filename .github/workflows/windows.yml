@@ -1,0 +1,65 @@
+name: Windows build
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+    tags: ['v*.*.*']
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm audit --omit=dev
+      - run: npm run make:installer
+      - run: npm run make:portable
+      - name: Prepare release artifacts
+        shell: pwsh
+        run: |
+          $version = (Get-Content package.json | ConvertFrom-Json).version
+          if ($env:GITHUB_REF_TYPE -eq 'tag' -and $env:GITHUB_REF_NAME -ne "v$version") {
+            throw "Tag $env:GITHUB_REF_NAME does not match package version $version"
+          }
+          New-Item -ItemType Directory -Force release | Out-Null
+          $setup = Get-ChildItem out/make/squirrel.windows/x64 -Filter '*Setup.exe' | Select-Object -First 1
+          $portable = Get-ChildItem out/make/zip/win32/x64 -Filter '*.zip' | Select-Object -First 1
+          if (-not $setup -or -not $portable) { throw 'Windows release artifacts are missing' }
+          Copy-Item $setup.FullName "release/GameShelf-$version-windows-x64-setup.exe"
+          Copy-Item $portable.FullName "release/GameShelf-$version-windows-x64-portable.zip"
+          $checksums = Get-ChildItem release | Sort-Object Name | ForEach-Object {
+            "$(($_ | Get-FileHash -Algorithm SHA256).Hash.ToLower())  $($_.Name)"
+          }
+          [IO.File]::WriteAllLines("$PWD/release/SHA256SUMS.txt", $checksums, [Text.UTF8Encoding]::new($false))
+      - uses: actions/upload-artifact@v7
+        with:
+          name: GameShelf-windows-${{ github.sha }}
+          path: release/
+          if-no-files-found: error
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: GameShelf-windows-${{ github.sha }}
+          path: release
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" release/* --repo "$GITHUB_REPOSITORY" --verify-tag --generate-notes --title "GameShelf $GITHUB_REF_NAME"

@@ -1,17 +1,19 @@
 {
   "name": "gameshelf",
   "productName": "GameShelf",
-  "version": "0.4.0",
+  "version": "1.0.0",
   "description": "A local-first private game library for Windows.",
   "main": ".vite/build/main.cjs",
   "private": true,
   "type": "module",
-  "license": "UNLICENSED",
+  "license": "MIT",
   "author": "kevincsq",
   "scripts": {
     "start": "electron-forge start",
     "package": "electron-forge package",
-    "make": "electron-forge make",
+    "make": "npm run make:installer",
+    "make:installer": "electron-forge make --platform win32 --arch x64 --targets @electron-forge/maker-squirrel",
+    "make:portable": "set GAMESHELF_PORTABLE=1&& electron-forge make --platform win32 --arch x64 --targets @electron-forge/maker-zip",
     "test": "node --test tests/*.test.ts",
     "typecheck": "tsc --noEmit"
   },

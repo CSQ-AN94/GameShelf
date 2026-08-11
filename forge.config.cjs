@@ -1,3 +1,6 @@
+const { writeFile } = require('node:fs/promises');
+const path = require('node:path');
+
 module.exports = {
   packagerConfig: {
     asar: true,
@@ -17,9 +20,18 @@ module.exports = {
     },
     {
       name: '@electron-forge/maker-zip',
-      platforms: ['darwin']
+      platforms: ['win32']
     }
   ],
+  hooks: {
+    postPackage: async (_config, result) => {
+      if (process.env.GAMESHELF_PORTABLE !== '1' || result.platform !== 'win32') return;
+      await Promise.all(result.outputPaths.map((outputPath) => writeFile(
+        path.join(outputPath, 'gameshelf-portable'),
+        'Keep this file next to GameShelf.exe to store data in the adjacent data folder.\n'
+      )));
+    }
+  },
   plugins: [
     {
       name: '@electron-forge/plugin-vite',

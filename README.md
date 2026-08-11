@@ -9,6 +9,7 @@
     <img src="https://img.shields.io/badge/data-local--first-202124?style=flat-square" alt="Local first" />
     <img src="https://img.shields.io/badge/Electron-202124?style=flat-square&logo=electron" alt="Electron" />
     <img src="https://img.shields.io/badge/React-202124?style=flat-square&logo=react" alt="React" />
+    <img src="https://img.shields.io/badge/license-MIT-16A34A?style=flat-square" alt="MIT license" />
   </p>
 </div>
 
@@ -32,7 +33,7 @@ GameShelf 是一款面向 Windows 本地游戏的桌面管理器。它不区分�
 | 原名与中文名独立保存、全局切换 | 自动记录启动次数、最近游玩与游玩时长 | 数据库、图片和记录默认只保存在本机 |
 | 缺失封面检查、批量状态/分类/合集/隐私整理 | 游戏设置中直接打开所在文件夹 | 移出游戏库不会删除游戏本体或存档 |
 
-0.4 增加安全的 Mod/补丁目录管理、带校验的存档快照与分支、系列顺序/整体进度，并收紧安全视图的所有内容投影。写入游戏或存档目录前必须预览、备份和确认；详见 [Package 与存档安全](docs/PACKAGES-AND-SAVES.md)。0.3 的扫描流程见 [批量扫描与本地元数据](docs/LIBRARY-IMPORT.md)，0.2 的数据库恢复说明见 [数据安全、恢复与 Windows 验收](docs/RECOVERY.md)。
+1.0.0 汇总了 0.3/0.4 已验证的游戏库、Package、存档与安全视图能力，并提供可持续构建的 Windows 安装版和便携版。详见 [变更记录](CHANGELOG.md)、[安装、升级与便携使用](docs/INSTALLATION.md) 和 [Package 与存档安全](docs/PACKAGES-AND-SAVES.md)。
 
 ## GameShelf 的设计方向
 
@@ -64,17 +65,21 @@ GameShelf 是一款面向 Windows 本地游戏的桌面管理器。它不区分�
 
 ## 数据与隐私
 
-GameShelf 不上传游戏列表、封面、启动路径或游玩记录。打包版会把数据库、封面、背景、备份和日志放在程序旁的 `data` 文件夹中，整个 `GameShelf` 文件夹可以一起整理或迁移；游戏本体保持在用户原有目录中。
+GameShelf 不上传游戏列表、封面、启动路径或游玩记录。安装版把受管数据放在 `%APPDATA%\GameShelf`，升级不会替换该目录；便携版通过程序旁的 `gameshelf-portable` 标记把数据放在同目录的 `data`。游戏本体保持在用户原有目录中。
 
-数据库备份保存在 `data/backups`，崩溃日志保存在 `data/logs`。数据库备份包含游戏索引、设置、合集、启动项和游玩记录；封面与背景仍留在 `data` 中，不会在恢复数据库时被覆盖。需要完整迁移时，请先退出 GameShelf，再复制整个 `data` 文件夹。
+数据库备份保存在当前数据目录的 `backups`，崩溃日志保存在 `logs`。数据库备份包含游戏索引、设置、合集、启动项和游玩记录；封面与背景仍留在当前数据目录中，不会在恢复数据库时被覆盖。需要完整迁移时，请先退出 GameShelf，再复制整个数据目录。
 
 “移出游戏库”只删除 GameShelf 中的索引与关联记录，不会删除游戏目录。批量扫描只读游戏目录；导入只写入 GameShelf 的数据库和受管封面目录。
 
-Package 变更会把完整目录在原位置与 `.gameshelf-disabled` 名称之间重命名，并先在 `data/package-backups` 创建带校验清单的备份。存档快照保存在 `data/save-snapshots`；恢复后，原存档目录会以 `.gameshelf-restore-old-*` 名称保留在同级位置，供人工回退。安全视图是界面隐藏能力，不是磁盘加密，也不会隐藏 GameShelf 以外的文件。
+Package 变更会把完整目录在原位置与 `.gameshelf-disabled` 名称之间重命名，并先在当前数据目录的 `package-backups` 创建带校验清单的备份。存档快照保存在 `save-snapshots`；恢复后，原存档目录会以 `.gameshelf-restore-old-*` 名称保留在同级位置，供人工回退。安全视图是界面隐藏能力，不是磁盘加密，也不会隐藏 GameShelf 以外的文件。
+
+## 安装与更新
+
+从 [GitHub Releases](https://github.com/CSQ-AN94/GameShelf/releases/latest) 下载 Windows x64 安装版或便携 ZIP，并使用同页的 `SHA256SUMS.txt` 校验文件。安装版、便携版之间的迁移与覆盖更新步骤见 [安装、升级与便携使用](docs/INSTALLATION.md)。
 
 ## 本地开发
 
-需要 Node.js 与 Windows 环境：
+需要 Node.js 24 与 Windows 环境：
 
 ```bash
 npm install
@@ -88,11 +93,14 @@ npm run typecheck
 npm test
 ```
 
-打包 Windows 应用：
+构建 Windows 安装版与便携版：
 
 ```bash
-npm run package
+npm run make:installer
+npm run make:portable
 ```
+
+GitHub Actions 会在 pull request、`main` 和版本 tag 上重复 typecheck、测试、生产依赖审计与两个 Windows 构建。
 
 ## 灵感与致谢
 
@@ -101,5 +109,5 @@ GameShelf 从 [PotatoVN](https://github.com/GoldenPotato137/PotatoVN)、[LunaBox
 ---
 
 <div align="center">
-  <sub>Early preview · Built for a private local library</sub>
+  <sub>GameShelf 1.0 · Built for a private local library</sub>
 </div>

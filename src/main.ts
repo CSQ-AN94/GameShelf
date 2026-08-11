@@ -8,6 +8,7 @@ import { app, BrowserWindow, dialog, ipcMain, Menu, shell, type IpcMainInvokeEve
 import started from 'electron-squirrel-startup';
 import { parseCategoryOrder } from './category-order';
 import { appendLog, clearRunning, createStoreBackup, libraryPaths, logTail, markRunning, prepareDatabase, restoreStore, type StartupSafetyResult } from './data-safety';
+import { resolveDataDirectory } from './data-directory';
 import { GameStore, inspectGameDatabase } from './game-store';
 import { analyzeExecutable } from './game-detection';
 import { createTreeSnapshot, isPathInside, renameDirectorySafely, restoreTreeSnapshot, validateTreeSnapshot } from './file-safety';
@@ -22,9 +23,7 @@ if (started) app.quit();
 
 const configuredDataDirectory = process.env.GAMESHELF_DATA_DIR?.trim();
 if (app.isPackaged || configuredDataDirectory) {
-  const dataDirectory = configuredDataDirectory
-    ? path.resolve(configuredDataDirectory)
-    : path.join(path.dirname(process.execPath), 'data');
+  const dataDirectory = resolveDataDirectory(configuredDataDirectory, app.isPackaged, process.execPath, app.getPath('userData'));
   mkdirSync(dataDirectory, { recursive: true });
   app.setPath('userData', dataDirectory);
 }
