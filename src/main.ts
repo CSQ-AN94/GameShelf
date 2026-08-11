@@ -1,12 +1,14 @@
 import { spawn } from 'node:child_process';
 import { mkdirSync } from 'node:fs';
-import { copyFile, mkdir, readFile, stat, unlink } from 'node:fs/promises';
+import { copyFile, mkdir, readFile, stat, unlink, writeFile } from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
 import { app, BrowserWindow, dialog, ipcMain, Menu, shell, type IpcMainInvokeEvent } from 'electron';
 import started from 'electron-squirrel-startup';
-import { GameStore } from './game-store';
+import { appendLog, clearRunning, createStoreBackup, libraryPaths, logTail, markRunning, prepareDatabase, restoreStore, type StartupSafetyResult } from './data-safety';
+import { GameStore, inspectGameDatabase } from './game-store';
 import { analyzeExecutable } from './game-detection';
-import { parseLaunchArguments } from './launch';
+import { detachedGameProcessOptions, parseLaunchArguments } from './launch';
 import type { AppPreferences, Game, GameSettingsInput, GameStatus, LaunchProfileInput, NewGameInput, PickedImage, ProfileInput, UserProfile } from './shared';
 
 declare const MAIN_WINDOW_VITE_DEV_SERVER_URL: string | undefined;
@@ -25,6 +27,8 @@ if (app.isPackaged || configuredDataDirectory) {
 
 let mainWindow: BrowserWindow | null = null;
 let store: GameStore | null = null;
+let startupSafety: StartupSafetyResult | null = null;
+const startupMessages: string[] = [];
 
 const gameTypes = new Set(['visual_novel', 'rpg', 'simulation', 'action', 'other']);
 const contentRatings = new Set(['general', 'mature', 'r18']);
@@ -37,8 +41,20 @@ function assertTrusted(event: IpcMainInvokeEvent): void {
 }
 
 function requireStore(): GameStore {
-  if (!store) throw new Error('Database is not ready');
+  if (!store) throw new Error('游戏库暂时不可用，请重启 GameShelf；若问题仍存在，请导出诊断信息');
   return store;
+}
+
+function errorText(error: unknown): string {
+  return error instanceof Error ? `${error.message}${error.stack ? ` | ${error.stack}` : ''}` : String(error);
+}
+
+function log(level: 'INFO' | 'WARN' | 'ERROR', message: string): void {
+  try {
+    appendLog(startupSafety?.paths.log ?? libraryPaths(app.getPath('userData')).log, level, message);
+  } catch {
+    // Logging must never replace the original failure.
+  }
 }
 
 async function imageDataUrl(filePath: string | null): Promise<string | null> {
@@ -74,7 +90,12 @@ async function validateExecutable(executablePath: string): Promise<void> {
   if (!path.isAbsolute(executablePath) || path.extname(executablePath).toLowerCase() !== '.exe') {
     throw new Error('请选择有效的 Windows .exe 文件');
   }
-  const details = await stat(executablePath);
+  let details: Awaited<ReturnType<typeof stat>>;
+  try {
+    details = await stat(executablePath);
+  } catch {
+    throw new Error('启动文件不存在或无法访问，请在“游戏设置 → 启动项”中重新选择 .exe 文件');
+  }
   if (!details.isFile()) throw new Error('启动文件不存在');
 }
 
@@ -276,17 +297,18 @@ function registerIpc(): void {
     if (!profile) throw new Error('找不到这个启动项');
     await validateExecutable(profile.executablePath);
     const startedAt = new Date();
-    const child = spawn(profile.executablePath, parseLaunchArguments(profile.launchArguments), {
-      cwd: profile.workingDirectory,
-      windowsHide: false,
-      stdio: 'ignore'
-    });
+    const child = spawn(profile.executablePath, parseLaunchArguments(profile.launchArguments), detachedGameProcessOptions(profile.workingDirectory));
     await new Promise<void>((resolve, reject) => {
       child.once('spawn', resolve);
-      child.once('error', reject);
+      child.once('error', (error) => reject(new Error(`启动失败：${error.message}。请检查启动文件权限和启动参数`)));
     });
+    child.unref();
     child.once('close', () => {
-      store?.recordSession(game.id, startedAt, (Date.now() - startedAt.getTime()) / 1000);
+      try {
+        store?.recordSession(game.id, startedAt, (Date.now() - startedAt.getTime()) / 1000);
+      } catch (error) {
+        log('ERROR', `记录游玩时长失败：${errorText(error)}`);
+      }
     });
   });
 
@@ -295,7 +317,12 @@ function registerIpc(): void {
     if (typeof id !== 'string') throw new Error('无效的游戏');
     const game = requireStore().getGame(id);
     if (!game) throw new Error('找不到这个游戏');
-    const details = await stat(game.workingDirectory);
+    let details: Awaited<ReturnType<typeof stat>>;
+    try {
+      details = await stat(game.workingDirectory);
+    } catch {
+      throw new Error('游戏文件夹不存在或无法访问，请检查磁盘连接和游戏启动项路径');
+    }
     if (!details.isDirectory()) throw new Error('游戏文件夹不存在');
     const error = await shell.openPath(game.workingDirectory);
     if (error) throw new Error(error);
@@ -361,8 +388,86 @@ function registerIpc(): void {
     assertTrusted(event);
     const dataDirectory = app.getPath('userData');
     const error = await shell.openPath(dataDirectory);
-    if (error) throw new Error(error);
+    if (error) throw new Error(`无法打开数据文件夹：${error}`);
     return dataDirectory;
+  });
+
+  ipcMain.handle('app:create-backup', (event) => {
+    assertTrusted(event);
+    const destination = createStoreBackup(requireStore(), app.getPath('userData'), 'manual');
+    log('INFO', `已创建手动备份：${destination}`);
+    return { message: '备份已创建并通过完整性校验', path: destination };
+  });
+
+  ipcMain.handle('app:restore-backup', async (event) => {
+    assertTrusted(event);
+    const dataDirectory = app.getPath('userData');
+    const selected = await dialog.showOpenDialog(mainWindow!, {
+      title: '选择 GameShelf 数据库备份',
+      defaultPath: libraryPaths(dataDirectory).backups,
+      properties: ['openFile'],
+      filters: [{ name: 'GameShelf database', extensions: ['sqlite', 'db'] }]
+    });
+    const source = selected.filePaths[0];
+    if (selected.canceled || !source) return null;
+    const inspection = inspectGameDatabase(source);
+    if (!inspection.valid) throw new Error(`无法恢复：${inspection.message}。当前游戏库未被修改。`);
+    const confirmation = await dialog.showMessageBox(mainWindow!, {
+      type: 'warning',
+      title: '恢复游戏库',
+      message: '用所选备份替换当前游戏库？',
+      detail: `已通过完整性校验（数据库版本 ${inspection.schemaVersion}）。GameShelf 会先自动保存当前游戏库；游戏目录不会被修改。`,
+      buttons: ['取消', '恢复'],
+      defaultId: 0,
+      cancelId: 0,
+      noLink: true
+    });
+    if (confirmation.response !== 1) return null;
+
+    const current = requireStore();
+    try {
+      const restored = restoreStore(current, source, dataDirectory);
+      store = restored.store;
+      log('WARN', '已从用户选择的备份恢复游戏库，并保留恢复前备份');
+      return { message: '游戏库已恢复；恢复前副本也已保留', path: restored.safetyBackup };
+    } catch (error) {
+      try {
+        current.getDiagnostics();
+        store = current;
+      } catch {
+        store = new GameStore(libraryPaths(dataDirectory).database);
+      }
+      log('ERROR', `恢复游戏库失败：${errorText(error)}`);
+      throw error;
+    }
+  });
+
+  ipcMain.handle('app:export-diagnostics', async (event) => {
+    assertTrusted(event);
+    const day = new Date().toISOString().slice(0, 10);
+    const selected = await dialog.showSaveDialog(mainWindow!, {
+      title: '导出 GameShelf 诊断信息',
+      defaultPath: `GameShelf-diagnostics-${day}.json`,
+      filters: [{ name: 'JSON', extensions: ['json'] }]
+    });
+    if (selected.canceled || !selected.filePath) return null;
+    const dataDirectory = app.getPath('userData');
+    const diagnostics = {
+      exportedAt: new Date().toISOString(),
+      app: { version: app.getVersion(), packaged: app.isPackaged },
+      system: { platform: process.platform, release: os.release(), arch: process.arch, electron: process.versions.electron, node: process.versions.node },
+      database: requireStore().getDiagnostics(),
+      startup: {
+        previousExitWasUnclean: startupSafety?.uncleanExit ?? false,
+        recoveredFromBackup: Boolean(startupSafety?.recoveredFrom),
+        preMigrationBackupCreated: Boolean(startupSafety?.preMigrationBackup)
+      },
+      privacy: '游戏名称、启动路径和图片路径未包含在此报告中；日志中的用户目录已替换。',
+      recentLogs: logTail(libraryPaths(dataDirectory).log, [dataDirectory, os.homedir()])
+    };
+    await writeFile(selected.filePath, `${JSON.stringify(diagnostics, null, 2)}\n`, { encoding: 'utf8', mode: 0o600 });
+    log('INFO', '已导出诊断信息');
+    return { message: '诊断信息已导出（不包含游戏名称和启动路径）', path: selected.filePath };
   });
 }
 
@@ -385,7 +490,20 @@ function createWindow(): void {
   });
   mainWindow.setMenuBarVisibility(false);
 
-  mainWindow.once('ready-to-show', () => mainWindow?.show());
+  mainWindow.once('ready-to-show', () => {
+    mainWindow?.show();
+    if (startupMessages.length > 0) {
+      void dialog.showMessageBox(mainWindow!, {
+        type: startupSafety?.recoveredFrom ? 'warning' : 'info',
+        title: 'GameShelf 数据安全检查',
+        message: startupSafety?.recoveredFrom ? '游戏库已从最近的有效备份恢复' : '游戏库安全检查已完成',
+        detail: startupMessages.join('\n'),
+        buttons: ['知道了'],
+        noLink: true
+      });
+    }
+  });
+  mainWindow.on('unresponsive', () => log('ERROR', '主窗口无响应'));
   mainWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   mainWindow.webContents.on('will-navigate', (event) => event.preventDefault());
 
@@ -396,12 +514,62 @@ function createWindow(): void {
   }
 }
 
+process.once('uncaughtException', (error) => {
+  log('ERROR', `主进程崩溃：${errorText(error)}`);
+  dialog.showErrorBox('GameShelf 意外退出', '崩溃日志已保存在 data\\logs。已经启动的游戏不会被关闭；重新打开 GameShelf 时会自动校验游戏库。');
+  app.exit(1);
+});
+
+process.on('unhandledRejection', (reason) => {
+  log('ERROR', `未处理的异步错误：${errorText(reason)}`);
+});
+
+app.on('render-process-gone', (_event, webContents, details) => {
+  if (details.reason === 'clean-exit') return;
+  log('ERROR', `渲染进程退出：reason=${details.reason} exitCode=${details.exitCode}`);
+  if (mainWindow?.webContents === webContents) {
+    void dialog.showMessageBox(mainWindow, {
+      type: 'error',
+      title: 'GameShelf 界面意外退出',
+      message: '游戏库和已经启动的游戏不受影响。',
+      detail: '你可以重新载入界面；若问题重复出现，请在“设置”中导出诊断信息。',
+      buttons: ['关闭', '重新载入'],
+      defaultId: 1,
+      cancelId: 0,
+      noLink: true
+    }).then((result) => {
+      if (result.response === 1 && !webContents.isDestroyed()) webContents.reload();
+    });
+  }
+});
+
 app.whenReady().then(() => {
   app.setAppUserModelId('com.squirrel.GameShelf.GameShelf');
   Menu.setApplicationMenu(null);
-  store = new GameStore(path.join(app.getPath('userData'), 'gameshelf.sqlite'));
+  const dataDirectory = app.getPath('userData');
+  startupSafety = prepareDatabase(dataDirectory);
+  if (startupSafety.recoveredFrom) {
+    startupMessages.push(`${startupSafety.uncleanExit ? '上次未正常退出，且' : ''}数据库校验失败；已从 ${startupSafety.recoveredFrom} 恢复。原文件保存在 ${startupSafety.preservedDatabase}。`);
+  } else if (startupSafety.uncleanExit) {
+    startupMessages.push('检测到上次未正常退出；SQLite 恢复与完整性校验通过，没有回退数据。');
+  }
+  if (startupSafety.preMigrationBackup) log('INFO', `迁移前备份：${startupSafety.preMigrationBackup}`);
+  store = new GameStore(startupSafety.paths.database);
+  try {
+    const automaticBackup = createStoreBackup(store, dataDirectory, 'auto');
+    log('INFO', `自动备份可用：${automaticBackup}`);
+  } catch (error) {
+    log('ERROR', `自动备份失败：${errorText(error)}`);
+    startupMessages.push(`自动备份失败：${error instanceof Error ? error.message : String(error)}。请检查 data 文件夹剩余空间与写入权限。`);
+  }
+  markRunning(startupSafety.paths);
+  log('INFO', `GameShelf ${app.getVersion()} 启动；数据库版本 ${store.getSchemaVersion()}`);
   registerIpc();
   createWindow();
+}).catch((error) => {
+  log('ERROR', `启动失败：${errorText(error)}`);
+  dialog.showErrorBox('无法打开 GameShelf 游戏库', `${error instanceof Error ? error.message : String(error)}\n\n原游戏目录不会被修改。请先复制 data 文件夹，再查看 data\\logs\\gameshelf.log。`);
+  app.exit(1);
 });
 
 app.on('window-all-closed', () => {
@@ -409,8 +577,14 @@ app.on('window-all-closed', () => {
 });
 
 app.on('before-quit', () => {
-  store?.close();
-  store = null;
+  try {
+    store?.close();
+    store = null;
+    if (startupSafety) clearRunning(startupSafety.paths);
+    log('INFO', 'GameShelf 正常退出');
+  } catch (error) {
+    log('ERROR', `关闭游戏库失败：${errorText(error)}`);
+  }
 });
 
 app.on('activate', () => {

@@ -108,6 +108,11 @@ export interface AppPreferences {
   sidebarCollapsed: boolean;
 }
 
+export interface DataOperationResult {
+  message: string;
+  path: string;
+}
+
 export interface GameSetupAnalysis {
   engine: string | null;
   suggestedType: GameType;
@@ -142,4 +147,7 @@ export interface GameShelfApi {
   getPreferences: () => Promise<AppPreferences>;
   savePreferences: (preferences: AppPreferences) => Promise<AppPreferences>;
   openDataDirectory: () => Promise<string>;
+  createBackup: () => Promise<DataOperationResult>;
+  restoreBackup: () => Promise<DataOperationResult | null>;
+  exportDiagnostics: () => Promise<DataOperationResult | null>;
 }

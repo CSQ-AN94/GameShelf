@@ -24,7 +24,10 @@ const api: GameShelfApi = {
   saveProfile: (input: ProfileInput) => ipcRenderer.invoke('profile:save', input),
   getPreferences: () => ipcRenderer.invoke('preferences:get'),
   savePreferences: (preferences: AppPreferences) => ipcRenderer.invoke('preferences:save', preferences),
-  openDataDirectory: () => ipcRenderer.invoke('app:open-data-directory')
+  openDataDirectory: () => ipcRenderer.invoke('app:open-data-directory'),
+  createBackup: () => ipcRenderer.invoke('app:create-backup'),
+  restoreBackup: () => ipcRenderer.invoke('app:restore-backup'),
+  exportDiagnostics: () => ipcRenderer.invoke('app:export-diagnostics')
 };
 
 contextBridge.exposeInMainWorld('gameshelf', api);

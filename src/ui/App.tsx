@@ -67,6 +67,11 @@ const statusLabels: Record<GameStatus, string> = {
   paused: '已搁置'
 };
 
+function errorMessage(reason: unknown): string {
+  const message = reason instanceof Error ? reason.message : String(reason);
+  return message.replace(/^Error invoking remote method '[^']+':\s*(?:Error:\s*)?/, '');
+}
+
 function Icon({ name, fill = false }: { name: IconName; fill?: boolean }) {
   return (
     <svg className={`app-icon icon-${name}`} viewBox="0 0 24 24" aria-hidden="true">
@@ -216,7 +221,7 @@ function CompletedTimeline({ games, titleMode, onOpen, onStatusChange }: { games
   );
 }
 
-function SettingsView({ preferences, profile, gameCount, collectionCount, onThemeChange, onTitleDisplayModeChange, onSafeViewChange, onEditProfile, onOpenDataDirectory }: {
+function SettingsView({ preferences, profile, gameCount, collectionCount, onThemeChange, onTitleDisplayModeChange, onSafeViewChange, onEditProfile, onOpenDataDirectory, onCreateBackup, onRestoreBackup, onExportDiagnostics }: {
   preferences: AppPreferences;
   profile: UserProfile;
   gameCount: number;
@@ -226,6 +231,9 @@ function SettingsView({ preferences, profile, gameCount, collectionCount, onThem
   onSafeViewChange: (enabled: boolean) => void;
   onEditProfile: () => void;
   onOpenDataDirectory: () => void;
+  onCreateBackup: () => void;
+  onRestoreBackup: () => void;
+  onExportDiagnostics: () => void;
 }) {
   return (
     <div className="settings-view">
@@ -236,6 +244,7 @@ function SettingsView({ preferences, profile, gameCount, collectionCount, onThem
         <section className="settings-card settings-row"><div className="settings-card-copy"><h2>安全视图</h2><p>开启后隐藏你在各游戏设置中指定的内容。</p></div><button className={preferences.safeView ? 'settings-switch on' : 'settings-switch'} onClick={() => onSafeViewChange(!preferences.safeView)}><i /></button></section>
         <section className="settings-card settings-row"><div className="settings-profile">{profile.avatarDataUrl ? <img src={profile.avatarDataUrl} alt="" /> : <span>{profile.name.slice(0, 1) || '玩'}</span>}<div><h2>{profile.name}</h2><p>头像与昵称</p></div></div><button className="settings-action" onClick={onEditProfile}>编辑资料</button></section>
         <section className="settings-card settings-row"><div className="settings-card-copy"><h2>本机资料</h2><p>{gameCount} 个游戏 · {collectionCount} 个合集。数据库、封面和记录保存在 Windows 应用数据目录。</p></div><button className="settings-action" onClick={onOpenDataDirectory}>打开文件夹</button></section>
+        <section className="settings-card settings-row"><div className="settings-card-copy"><h2>数据安全与诊断</h2><p>每天首次启动自动备份数据库。恢复前会校验备份并保留当前游戏库；所有操作都不会写入游戏目录。</p></div><div className="settings-actions"><button className="settings-action" onClick={onCreateBackup}>立即备份</button><button className="settings-action" onClick={onRestoreBackup}>从备份恢复</button><button className="settings-action" onClick={onExportDiagnostics}>导出诊断</button></div></section>
       </div>
     </div>
   );
@@ -321,7 +330,7 @@ function AddGameDialog({ categorySuggestions, onClose, onAdded }: { categorySugg
       setType(detected.suggestedType);
       setCategory(detected.suggestedCategory);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : String(reason));
+      setError(errorMessage(reason));
     } finally {
       setAnalyzing(false);
     }
@@ -342,7 +351,7 @@ function AddGameDialog({ categorySuggestions, onClose, onAdded }: { categorySugg
       const input: NewGameInput = { title, chineseTitle, type, category, contentRating, executablePath, coverSourcePath, status, wishlist, hideInSafeView };
       onAdded(await window.gameshelf.addGame(input));
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : String(reason));
+      setError(errorMessage(reason));
     } finally {
       setSaving(false);
     }
@@ -380,7 +389,7 @@ function CreateCollectionDialog({ onClose, onCreated }: { onClose: () => void; o
   async function submit(event: FormEvent) {
     event.preventDefault();
     setError('');
-    try { onCreated(await window.gameshelf.createCollection(name)); } catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); }
+    try { onCreated(await window.gameshelf.createCollection(name)); } catch (reason) { setError(errorMessage(reason)); }
   }
   return (
     <div className="modal-backdrop"><section className="modal compact-modal" role="dialog" aria-modal="true" aria-labelledby="collection-title"><header className="modal-header"><div><span className="eyebrow">我的合集</span><h2 id="collection-title">新建游戏合集</h2></div><button className="close-button" onClick={onClose}>×</button></header><form onSubmit={submit}><div className="form-fields"><label>合集名称<input autoFocus value={name} onChange={(event) => setName(event.target.value)} placeholder="例如：苍之彼方系列" /></label></div>{error && <p className="form-error">{error}</p>}<footer className="modal-footer"><button type="button" className="secondary-button" onClick={onClose}>取消</button><button className="primary-button">创建合集</button></footer></form></section></div>
@@ -401,7 +410,7 @@ function ProfileDialog({ profile, onClose, onSaved }: { profile: UserProfile; on
   async function submit(event: FormEvent) {
     event.preventDefault();
     setError('');
-    try { onSaved(await window.gameshelf.saveProfile({ name, avatarSourcePath })); } catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); }
+    try { onSaved(await window.gameshelf.saveProfile({ name, avatarSourcePath })); } catch (reason) { setError(errorMessage(reason)); }
   }
   return (
     <div className="modal-backdrop"><section className="modal compact-modal" role="dialog" aria-modal="true" aria-labelledby="profile-title"><header className="modal-header"><div><span className="eyebrow">个人资料</span><h2 id="profile-title">编辑头像与昵称</h2></div><button className="close-button" onClick={onClose}>×</button></header><form onSubmit={submit}><div className="profile-editor"><button className="avatar-picker" type="button" onClick={chooseAvatar}>{preview ? <img src={preview} alt="头像预览" /> : <span>{name.slice(0, 1) || '玩'}</span>}<small>选择头像</small></button><div className="form-fields"><label>昵称<input autoFocus value={name} onChange={(event) => setName(event.target.value)} placeholder="你的昵称" /></label></div></div>{error && <p className="form-error">{error}</p>}<footer className="modal-footer"><button type="button" className="secondary-button" onClick={onClose}>取消</button><button className="primary-button">保存</button></footer></form></section></div>
@@ -471,7 +480,7 @@ function GameSettingsDialog({ game, titleMode, onClose, onChanged, onRemoved }: 
   async function openGameDirectory() {
     setError('');
     try { await window.gameshelf.openGameDirectory(game.id); }
-    catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); }
+    catch (reason) { setError(errorMessage(reason)); }
   }
 
   async function removeFromLibrary() {
@@ -482,7 +491,7 @@ function GameSettingsDialog({ game, titleMode, onClose, onChanged, onRemoved }: 
       onRemoved(game);
     } catch (reason) {
       setConfirmingRemoval(false);
-      setError(reason instanceof Error ? reason.message : String(reason));
+      setError(errorMessage(reason));
     } finally { setRemoving(false); }
   }
 
@@ -495,7 +504,7 @@ function GameSettingsDialog({ game, titleMode, onClose, onChanged, onRemoved }: 
       setCoverSourcePath(null);
       setBackgroundSourcePath(null);
       setSaved(true);
-    } catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); }
+    } catch (reason) { setError(errorMessage(reason)); }
     finally { setSaving(false); }
   }
 
@@ -511,7 +520,7 @@ function GameSettingsDialog({ game, titleMode, onClose, onChanged, onRemoved }: 
       });
       setProfiles(updated.launchProfiles);
       onChanged(updated);
-    } catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); }
+    } catch (reason) { setError(errorMessage(reason)); }
   }
 
   async function deleteProfile(profile: LaunchProfileDraft) {
@@ -521,7 +530,7 @@ function GameSettingsDialog({ game, titleMode, onClose, onChanged, onRemoved }: 
       const updated = await window.gameshelf.deleteLaunchProfile(game.id, profile.id);
       setProfiles(updated.launchProfiles);
       onChanged(updated);
-    } catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); }
+    } catch (reason) { setError(errorMessage(reason)); }
   }
 
   function addProfile() {
@@ -613,6 +622,8 @@ export function App() {
       setCollections(nextCollections);
       setProfile(nextProfile);
       setPreferences(nextPreferences);
+    } catch (reason) {
+      setMessage(`${errorMessage(reason)}。可在“设置 → 数据安全与诊断”导出诊断信息。`);
     } finally { setLoading(false); }
   }, []);
 
@@ -662,7 +673,7 @@ export function App() {
       await window.gameshelf.launchGame(game.id, profileId);
       setMessage(`已启动 ${displayTitle(game, preferences.titleDisplayMode)}`);
     } catch (reason) {
-      setMessage(reason instanceof Error ? reason.message : String(reason));
+      setMessage(errorMessage(reason));
     }
   }
 
@@ -676,7 +687,7 @@ export function App() {
       replaceGame(updated);
       const title = displayTitle(game, preferences.titleDisplayMode);
       setMessage(updated.wishlist ? `已将 ${title} 加入欲玩清单` : `已将 ${title} 移出欲玩清单`);
-    } catch (reason) { setMessage(reason instanceof Error ? reason.message : String(reason)); }
+    } catch (reason) { setMessage(errorMessage(reason)); }
   }
 
   async function updateStatus(game: Game, status: GameStatus) {
@@ -686,7 +697,7 @@ export function App() {
       const title = displayTitle(game, preferences.titleDisplayMode);
       setMessage(status === 'completed' ? `已将 ${title} 标记为已玩完` : `已更新 ${title} 的状态`);
     } catch (reason) {
-      setMessage(reason instanceof Error ? reason.message : String(reason));
+      setMessage(errorMessage(reason));
     }
   }
 
@@ -697,7 +708,7 @@ export function App() {
       setEditingCategoryFor(null);
       setMessage(`已将 ${displayTitle(game, preferences.titleDisplayMode)} 分类为 ${updated.category}`);
     } catch (reason) {
-      setMessage(reason instanceof Error ? reason.message : String(reason));
+      setMessage(errorMessage(reason));
     }
   }
 
@@ -708,7 +719,7 @@ export function App() {
       setManagingCollectionsFor(null);
       setMessage(`已更新 ${displayTitle(game, preferences.titleDisplayMode)} 的合集`);
     } catch (reason) {
-      setMessage(reason instanceof Error ? reason.message : String(reason));
+      setMessage(errorMessage(reason));
     }
   }
 
@@ -716,12 +727,42 @@ export function App() {
     try {
       setPreferences(await window.gameshelf.savePreferences(next));
     } catch (reason) {
-      setMessage(reason instanceof Error ? reason.message : String(reason));
+      setMessage(errorMessage(reason));
     }
   }
 
   async function openDataDirectory() {
-    try { await window.gameshelf.openDataDirectory(); } catch (reason) { setMessage(reason instanceof Error ? reason.message : String(reason)); }
+    try { await window.gameshelf.openDataDirectory(); } catch (reason) { setMessage(errorMessage(reason)); }
+  }
+
+  async function createBackup() {
+    try {
+      const result = await window.gameshelf.createBackup();
+      setMessage(`${result.message}：${result.path}`);
+    } catch (reason) {
+      setMessage(`${errorMessage(reason)}。请检查 data 文件夹剩余空间与写入权限。`);
+    }
+  }
+
+  async function restoreBackup() {
+    try {
+      const result = await window.gameshelf.restoreBackup();
+      if (!result) return;
+      setSelectedId(null);
+      await refresh();
+      setMessage(`${result.message}：${result.path}`);
+    } catch (reason) {
+      setMessage(errorMessage(reason));
+    }
+  }
+
+  async function exportDiagnostics() {
+    try {
+      const result = await window.gameshelf.exportDiagnostics();
+      if (result) setMessage(`${result.message}：${result.path}`);
+    } catch (reason) {
+      setMessage(`${errorMessage(reason)}。请确认目标文件夹可写。`);
+    }
   }
 
   function toggleSidebarSection(section: SidebarSectionName) {
@@ -760,7 +801,7 @@ export function App() {
       </aside>
 
       <main className="main-pane">
-        {selected ? <GameDetail game={selected} titleMode={preferences.titleDisplayMode} collections={collections} onBack={() => setSelectedId(null)} onLaunch={(profileId) => void launch(selected, profileId)} onStatusChange={(status) => void updateStatus(selected, status)} onToggleWishlist={() => void toggleWishlist(selected)} onEditCategory={() => setEditingCategoryFor(selected.id)} onManageCollections={() => setManagingCollectionsFor(selected.id)} onEditSettings={() => setEditingSettingsFor(selected.id)} /> : filter === 'settings' && !search.trim() ? <SettingsView preferences={preferences} profile={profile} gameCount={games.length} collectionCount={collections.length} onThemeChange={(theme) => void savePreferences({ ...preferences, theme })} onTitleDisplayModeChange={(titleDisplayMode) => void savePreferences({ ...preferences, titleDisplayMode })} onSafeViewChange={(safeView) => void savePreferences({ ...preferences, safeView })} onEditProfile={() => setEditingProfile(true)} onOpenDataDirectory={() => void openDataDirectory()} /> : loading && games.length === 0 ? <div className="loading-state">正在读取游戏库…</div> : games.length === 0 ? <EmptyLibrary onAdd={() => setAdding(true)} /> : showLibrary ? (
+        {selected ? <GameDetail game={selected} titleMode={preferences.titleDisplayMode} collections={collections} onBack={() => setSelectedId(null)} onLaunch={(profileId) => void launch(selected, profileId)} onStatusChange={(status) => void updateStatus(selected, status)} onToggleWishlist={() => void toggleWishlist(selected)} onEditCategory={() => setEditingCategoryFor(selected.id)} onManageCollections={() => setManagingCollectionsFor(selected.id)} onEditSettings={() => setEditingSettingsFor(selected.id)} /> : filter === 'settings' && !search.trim() ? <SettingsView preferences={preferences} profile={profile} gameCount={games.length} collectionCount={collections.length} onThemeChange={(theme) => void savePreferences({ ...preferences, theme })} onTitleDisplayModeChange={(titleDisplayMode) => void savePreferences({ ...preferences, titleDisplayMode })} onSafeViewChange={(safeView) => void savePreferences({ ...preferences, safeView })} onEditProfile={() => setEditingProfile(true)} onOpenDataDirectory={() => void openDataDirectory()} onCreateBackup={() => void createBackup()} onRestoreBackup={() => void restoreBackup()} onExportDiagnostics={() => void exportDiagnostics()} /> : loading && games.length === 0 ? <div className="loading-state">正在读取游戏库…</div> : games.length === 0 ? <EmptyLibrary onAdd={() => setAdding(true)} /> : showLibrary ? (
           <div className="library-view"><header className="library-toolbar"><div><span className="eyebrow">游戏库</span><h1>{search.trim() ? '本机搜索结果' : filterTitle(filter, collections)}</h1></div><div><span>{visibleGames.length} 个游戏</span>{preferences.safeView && <span className="safe-chip">安全视图已开启</span>}<button className="add-button" onClick={() => setAdding(true)}><Icon name="plus" />添加游戏</button></div></header><section className={filter === 'completed' && !search.trim() ? 'timeline-content' : 'library-content'}>{filter === 'completed' && !search.trim() ? <CompletedTimeline games={visibleGames} titleMode={preferences.titleDisplayMode} onOpen={(game) => setSelectedId(game.id)} onStatusChange={(game, status) => void updateStatus(game, status)} /> : <><div className="poster-grid">{visibleGames.map((game) => <Poster key={game.id} game={game} titleMode={preferences.titleDisplayMode} onOpen={() => setSelectedId(game.id)} />)}</div>{visibleGames.length === 0 && <div className="no-results">没有符合当前条件的游戏</div>}</>}</section></div>
         ) : <HomeView games={visibleGames} titleMode={preferences.titleDisplayMode} onOpen={(game) => setSelectedId(game.id)} onLaunch={(game) => void launch(game)} onAdd={() => setAdding(true)} onShowAll={() => setFilter('all')} />}
       </main>
@@ -771,7 +812,7 @@ export function App() {
       {categoryGame && <CategoryDialog game={categoryGame} titleMode={preferences.titleDisplayMode} suggestions={categories} onClose={() => setEditingCategoryFor(null)} onSaved={(category) => void updateCategory(categoryGame, category)} />}
       {membershipGame && <CollectionMembershipDialog game={membershipGame} titleMode={preferences.titleDisplayMode} collections={collections} onClose={() => setManagingCollectionsFor(null)} onSaved={(ids) => void saveMembership(membershipGame, ids)} />}
       {settingsGame && <GameSettingsDialog game={settingsGame} titleMode={preferences.titleDisplayMode} onClose={() => setEditingSettingsFor(null)} onChanged={replaceGame} onRemoved={removeGameFromView} />}
-      {message && <div className="toast">{message}</div>}
+      {message && <div className="toast" role="status" aria-live="polite">{message}</div>}
     </div>
   );
 }
