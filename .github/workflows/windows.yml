@@ -41,7 +41,7 @@ jobs:
           $checksums = Get-ChildItem release | Sort-Object Name | ForEach-Object {
             "$(($_ | Get-FileHash -Algorithm SHA256).Hash.ToLower())  $($_.Name)"
           }
-          [IO.File]::WriteAllLines("$PWD/release/SHA256SUMS.txt", $checksums, [Text.UTF8Encoding]::new($false))
+          [IO.File]::WriteAllText("$PWD/release/SHA256SUMS.txt", ($checksums -join "`n") + "`n", [Text.UTF8Encoding]::new($false))
       - uses: actions/upload-artifact@v7
         with:
           name: GameShelf-windows-${{ github.sha }}
