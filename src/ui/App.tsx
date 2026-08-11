@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import type { AppPreferences, BatchImportInput, ContentRating, Game, GameCollection, GamePackage, GameSetupAnalysis, GameStatus, GameType, LaunchProfile, LibraryScanCandidate, NewGameInput, PackageChange, PackageChangePreview, SaveLocation, SaveRestorePreview, ThemeMode, TitleDisplayMode, UserProfile } from '../shared';
 import { applySafeView } from '../safe-view';
+import { gameTypeLabels as typeLabels, ratingLabels, searchGames, statusLabels } from '../search';
 import { alternateTitle, displayTitle } from '../title-display';
 
 type LibraryFilter = 'home' | 'settings' | 'all' | 'recent' | 'wishlist' | 'missing-cover' | GameStatus | `category:${string}` | `collection:${string}`;
@@ -39,33 +40,12 @@ const typeIcons: Record<GameType, IconName> = {
   other: 'gamepad'
 };
 
-const typeLabels: Record<GameType, string> = {
-  visual_novel: '视觉小说',
-  rpg: 'RPG',
-  simulation: '模拟经营',
-  action: '动作',
-  other: '其他'
-};
-
 const defaultCategories: Record<GameType, string> = {
   visual_novel: 'Galgame',
   rpg: 'RPG',
   simulation: '模拟经营',
   action: '动作游戏',
   other: '其他游戏'
-};
-
-const ratingLabels: Record<ContentRating, string> = {
-  general: '全年龄',
-  mature: '成人向',
-  r18: 'R18'
-};
-
-const statusLabels: Record<GameStatus, string> = {
-  unplayed: '未开始',
-  playing: '游玩中',
-  completed: '已完成',
-  paused: '已搁置'
 };
 
 const packageKindLabels = { mod: 'Mod', translation: '汉化补丁', adult_patch: '内容补丁', voice: '语音包', fix: '修复补丁', other: '其他 Package' } as const;
@@ -808,6 +788,15 @@ function GameSettingsDialog({ game, titleMode, onClose, onChanged, onRemoved }: 
   );
 }
 
+function SearchView({ query, results, titleMode, viewMode, safeView, onQueryChange, onClose, onOpen, onViewModeChange }: { query: string; results: Game[]; titleMode: TitleDisplayMode; viewMode: AppPreferences['libraryViewMode']; safeView: boolean; onQueryChange: (value: string) => void; onClose: () => void; onOpen: (game: Game) => void; onViewModeChange: (mode: AppPreferences['libraryViewMode']) => void }) {
+  const active = Boolean(query.trim());
+  return <div className="search-view">
+    <header className="search-header"><button className="back-button" onClick={onClose}>‹ 返回</button><span className="eyebrow">游戏库</span><h1>搜索</h1><p>按标题、会社、分类、状态、分级、合集或启动项查找。</p></header>
+    <label className="search-page-input"><Icon name="search" /><input autoFocus value={query} onChange={(event) => onQueryChange(event.target.value)} placeholder="搜索整个游戏库" aria-label="搜索全部游戏" />{active && <button type="button" onClick={() => onQueryChange('')}>清除</button>}</label>
+    {!active ? <section className="search-empty"><h2>快捷筛选</h2><div className="search-suggestions">{['游玩中', '未开始', '已玩完', '欲玩清单', 'R18'].map((suggestion) => <button key={suggestion} onClick={() => onQueryChange(suggestion)}>{suggestion}</button>)}</div><p>也可以组合输入，例如“Fate R18”或“白色相簿系列”。按 Esc 返回刚才的位置。</p></section> : <><div className="search-summary"><span><strong>{results.length}</strong> 个结果</span>{safeView && <span className="safe-chip">安全视图已开启</span>}<span className="view-switch"><button className={viewMode === 'grid' ? 'active' : ''} onClick={() => onViewModeChange('grid')}>封面墙</button><button className={viewMode === 'list' ? 'active' : ''} onClick={() => onViewModeChange('list')}>信息列表</button></span></div><section className="search-results">{viewMode === 'grid' ? <div className="poster-grid">{results.map((game) => <Poster key={game.id} game={game} titleMode={titleMode} onOpen={() => onOpen(game)} />)}</div> : <LibraryList games={results} titleMode={titleMode} onOpen={onOpen} />}{results.length === 0 && <div className="no-results">没有匹配结果，试试更短的关键词或游戏状态</div>}</section></>}
+  </div>;
+}
+
 function filterTitle(filter: LibraryFilter, collections: GameCollection[]): string {
   if (filter === 'all') return '全部游戏';
   if (filter === 'recent') return '最近游玩';
@@ -827,6 +816,8 @@ export function App() {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<LibraryFilter>('home');
   const [search, setSearch] = useState('');
+  const [searching, setSearching] = useState(false);
+  const searchOrigin = useRef<{ filter: LibraryFilter; selectedId: string | null } | null>(null);
   const [preferences, setPreferences] = useState<AppPreferences>({ theme: 'dark', titleDisplayMode: 'original', libraryViewMode: 'grid', safeView: false, sidebarCollapsed: false });
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
@@ -879,9 +870,7 @@ export function App() {
   const visibleCollections = safeLibrary.collections;
 
   const visibleGames = useMemo(() => {
-    const query = search.trim().toLocaleLowerCase();
     return safeGames.filter((game) => {
-      if (query) return `${game.title} ${game.chineseTitle} ${game.developer} ${game.category}`.toLocaleLowerCase().includes(query);
       if (filter.startsWith('collection:')) return visibleCollections.find((collection) => collection.id === filter.slice(11))?.gameIds.includes(game.id) ?? false;
       if (filter.startsWith('category:')) return game.category === filter.slice(9);
       if (filter === 'recent') return Boolean(game.lastPlayedAt);
@@ -890,7 +879,8 @@ export function App() {
       if (['unplayed', 'playing', 'completed', 'paused'].includes(filter)) return game.status === filter;
       return true;
     });
-  }, [filter, safeGames, search, visibleCollections]);
+  }, [filter, safeGames, visibleCollections]);
+  const searchResults = useMemo(() => searchGames(safeGames, visibleCollections, search), [safeGames, search, visibleCollections]);
 
   const selected = safeGames.find((game) => game.id === selectedId) ?? null;
   const categoryGame = safeGames.find((game) => game.id === editingCategoryFor) ?? null;
@@ -975,6 +965,8 @@ export function App() {
     if (safeView) {
       setFilter('home');
       setSearch('');
+      setSearching(false);
+      searchOrigin.current = null;
       setMessage('');
     }
     await savePreferences({ ...preferences, safeView });
@@ -1034,16 +1026,58 @@ export function App() {
     setMessage(`已将 ${displayTitle(game, preferences.titleDisplayMode)} 移出游戏库，游戏文件未删除`);
   }
 
-  function navItem(value: LibraryFilter, icon: IconName, label: string) {
-    return <button key={value} className={filter === value && !selected ? 'nav-item active' : 'nav-item'} title={label} onClick={() => { setFilter(value); setSelectedId(null); }}><Icon name={icon} />{label}</button>;
+  function openSearch() {
+    if (!searching) searchOrigin.current = { filter, selectedId };
+    setSelectedId(null);
+    setSearching(true);
   }
 
-  const showLibrary = search.trim() !== '' || (filter !== 'home' && filter !== 'settings');
+  function closeSearch() {
+    const origin = searchOrigin.current;
+    setSearch('');
+    setSearching(false);
+    searchOrigin.current = null;
+    if (origin) {
+      setFilter(origin.filter);
+      setSelectedId(origin.selectedId);
+    }
+  }
+
+  function navigateTo(value: LibraryFilter) {
+    setSearch('');
+    setSearching(false);
+    searchOrigin.current = null;
+    setFilter(value);
+    setSelectedId(null);
+  }
+
+  useEffect(() => {
+    if (!searching) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      const origin = searchOrigin.current;
+      setSearch('');
+      setSearching(false);
+      searchOrigin.current = null;
+      if (origin) {
+        setFilter(origin.filter);
+        setSelectedId(origin.selectedId);
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [searching]);
+
+  function navItem(value: LibraryFilter, icon: IconName, label: string) {
+    return <button key={value} className={filter === value && !selected && !searching ? 'nav-item active' : 'nav-item'} title={label} onClick={() => navigateTo(value)}><Icon name={icon} />{label}</button>;
+  }
+
+  const showLibrary = filter !== 'home' && filter !== 'settings';
 
   return (
     <div className={preferences.sidebarCollapsed ? 'app-shell sidebar-collapsed' : 'app-shell'}>
       <aside className="sidebar">
-        <div className="sidebar-top"><label className="sidebar-search"><Icon name="search" /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="搜索游戏" /></label><button className="sidebar-collapse" title={preferences.sidebarCollapsed ? '展开侧栏' : '收起侧栏'} aria-label={preferences.sidebarCollapsed ? '展开侧栏' : '收起侧栏'} onClick={() => void savePreferences({ ...preferences, sidebarCollapsed: !preferences.sidebarCollapsed })}><Icon name="sidebar" /></button></div>
+        <div className="sidebar-top"><label className={searching ? 'sidebar-search active' : 'sidebar-search'}><Icon name="search" /><input value={search} onFocus={openSearch} onChange={(event) => { openSearch(); setSearch(event.target.value); }} placeholder="搜索游戏" />{searching && <button type="button" className="sidebar-search-close" aria-label="关闭搜索" onClick={(event) => { event.preventDefault(); closeSearch(); }}>×</button>}</label><button className="sidebar-collapse" title={preferences.sidebarCollapsed ? '展开侧栏' : '收起侧栏'} aria-label={preferences.sidebarCollapsed ? '展开侧栏' : '收起侧栏'} onClick={() => void savePreferences({ ...preferences, sidebarCollapsed: !preferences.sidebarCollapsed })}><Icon name="sidebar" /></button></div>
         <nav className="sidebar-nav">
           {navItem('home', 'home', '主页')}
           <section className="nav-section"><button className={collapsedSections.library ? 'nav-section-heading collapsed' : 'nav-section-heading'} onClick={() => toggleSidebarSection('library')} aria-expanded={!collapsedSections.library}><strong>游戏库</strong><Icon name="chevron" /></button><div className="nav-section-content" hidden={collapsedSections.library}>{navItem('all', 'library', '全部游戏')}{navItem('completed', 'check', '已玩完')}{navItem('wishlist', 'clock', '欲玩清单')}{navItem('missing-cover', 'sparkles', '缺失封面')}</div></section>
@@ -1058,8 +1092,8 @@ export function App() {
       </aside>
 
       <main className="main-pane">
-        {selected ? <GameDetail game={selected} titleMode={preferences.titleDisplayMode} collections={visibleCollections} onBack={() => setSelectedId(null)} onLaunch={(profileId) => void launch(selected, profileId)} onStatusChange={(status) => void updateStatus(selected, status)} onToggleWishlist={() => void toggleWishlist(selected)} onEditCategory={() => setEditingCategoryFor(selected.id)} onManageCollections={() => preferences.safeView ? setMessage('关闭安全视图后才能修改合集归属') : setManagingCollectionsFor(selected.id)} onEditSettings={() => setEditingSettingsFor(selected.id)} /> : filter === 'settings' && !search.trim() ? <SettingsView preferences={preferences} profile={profile} gameCount={safeGames.length} collectionCount={visibleCollections.length} onThemeChange={(theme) => void savePreferences({ ...preferences, theme })} onTitleDisplayModeChange={(titleDisplayMode) => void savePreferences({ ...preferences, titleDisplayMode })} onSafeViewChange={(safeView) => void changeSafeView(safeView)} onEditProfile={() => setEditingProfile(true)} onOpenDataDirectory={() => void openDataDirectory()} onCreateBackup={() => void createBackup()} onRestoreBackup={() => void restoreBackup()} onExportDiagnostics={() => void exportDiagnostics()} /> : loading && games.length === 0 ? <div className="loading-state">正在读取游戏库…</div> : games.length === 0 ? <EmptyLibrary onAdd={() => setScanning(true)} /> : showLibrary ? (
-          <div className="library-view"><header className="library-toolbar"><div><span className="eyebrow">游戏库</span><h1>{search.trim() ? '本机搜索结果' : filterTitle(filter, visibleCollections)}</h1></div><div><span>{visibleGames.length} 个游戏</span>{preferences.safeView && <span className="safe-chip">安全视图已开启</span>}<span className="view-switch"><button className={preferences.libraryViewMode === 'grid' ? 'active' : ''} onClick={() => void savePreferences({ ...preferences, libraryViewMode: 'grid' })}>封面墙</button><button className={preferences.libraryViewMode === 'list' ? 'active' : ''} onClick={() => void savePreferences({ ...preferences, libraryViewMode: 'list' })}>信息列表</button></span><button className="secondary-button" onClick={() => setBulkEditing({ games: visibleGames })}>批量整理</button><button className="secondary-button" onClick={() => setAdding(true)}>单个添加</button><button className="add-button" onClick={() => setScanning(true)}><Icon name="search" />扫描导入</button></div></header><section className={filter === 'completed' && !search.trim() ? 'timeline-content' : 'library-content'}>{filter === 'completed' && !search.trim() ? <CompletedTimeline games={visibleGames} titleMode={preferences.titleDisplayMode} onOpen={(game) => setSelectedId(game.id)} onStatusChange={(game, status) => void updateStatus(game, status)} /> : activeCollection && !search.trim() ? <CollectionSeriesView collection={activeCollection} games={safeGames} titleMode={preferences.titleDisplayMode} onOpen={(game) => setSelectedId(game.id)} onOrderChange={(ids) => void updateCollectionOrder(activeCollection, ids)} /> : <>{preferences.libraryViewMode === 'grid' ? <div className="poster-grid">{visibleGames.map((game) => <Poster key={game.id} game={game} titleMode={preferences.titleDisplayMode} onOpen={() => setSelectedId(game.id)} />)}</div> : <LibraryList games={visibleGames} titleMode={preferences.titleDisplayMode} onOpen={(game) => setSelectedId(game.id)} />}{visibleGames.length === 0 && <div className="no-results">没有符合当前条件的游戏</div>}</>}</section></div>
+        {selected ? <GameDetail game={selected} titleMode={preferences.titleDisplayMode} collections={visibleCollections} onBack={() => setSelectedId(null)} onLaunch={(profileId) => void launch(selected, profileId)} onStatusChange={(status) => void updateStatus(selected, status)} onToggleWishlist={() => void toggleWishlist(selected)} onEditCategory={() => setEditingCategoryFor(selected.id)} onManageCollections={() => preferences.safeView ? setMessage('关闭安全视图后才能修改合集归属') : setManagingCollectionsFor(selected.id)} onEditSettings={() => setEditingSettingsFor(selected.id)} /> : searching ? <SearchView query={search} results={searchResults} titleMode={preferences.titleDisplayMode} viewMode={preferences.libraryViewMode} safeView={preferences.safeView} onQueryChange={setSearch} onClose={closeSearch} onOpen={(game) => setSelectedId(game.id)} onViewModeChange={(libraryViewMode) => void savePreferences({ ...preferences, libraryViewMode })} /> : filter === 'settings' ? <SettingsView preferences={preferences} profile={profile} gameCount={safeGames.length} collectionCount={visibleCollections.length} onThemeChange={(theme) => void savePreferences({ ...preferences, theme })} onTitleDisplayModeChange={(titleDisplayMode) => void savePreferences({ ...preferences, titleDisplayMode })} onSafeViewChange={(safeView) => void changeSafeView(safeView)} onEditProfile={() => setEditingProfile(true)} onOpenDataDirectory={() => void openDataDirectory()} onCreateBackup={() => void createBackup()} onRestoreBackup={() => void restoreBackup()} onExportDiagnostics={() => void exportDiagnostics()} /> : loading && games.length === 0 ? <div className="loading-state">正在读取游戏库…</div> : games.length === 0 ? <EmptyLibrary onAdd={() => setScanning(true)} /> : showLibrary ? (
+          <div className="library-view"><header className="library-toolbar"><div><span className="eyebrow">游戏库</span><h1>{filterTitle(filter, visibleCollections)}</h1></div><div><span>{visibleGames.length} 个游戏</span>{preferences.safeView && <span className="safe-chip">安全视图已开启</span>}<span className="view-switch"><button className={preferences.libraryViewMode === 'grid' ? 'active' : ''} onClick={() => void savePreferences({ ...preferences, libraryViewMode: 'grid' })}>封面墙</button><button className={preferences.libraryViewMode === 'list' ? 'active' : ''} onClick={() => void savePreferences({ ...preferences, libraryViewMode: 'list' })}>信息列表</button></span><button className="secondary-button" onClick={() => setBulkEditing({ games: visibleGames })}>批量整理</button><button className="secondary-button" onClick={() => setAdding(true)}>单个添加</button><button className="add-button" onClick={() => setScanning(true)}><Icon name="search" />扫描导入</button></div></header><section className={filter === 'completed' ? 'timeline-content' : 'library-content'}>{filter === 'completed' ? <CompletedTimeline games={visibleGames} titleMode={preferences.titleDisplayMode} onOpen={(game) => setSelectedId(game.id)} onStatusChange={(game, status) => void updateStatus(game, status)} /> : activeCollection ? <CollectionSeriesView collection={activeCollection} games={safeGames} titleMode={preferences.titleDisplayMode} onOpen={(game) => setSelectedId(game.id)} onOrderChange={(ids) => void updateCollectionOrder(activeCollection, ids)} /> : <>{preferences.libraryViewMode === 'grid' ? <div className="poster-grid">{visibleGames.map((game) => <Poster key={game.id} game={game} titleMode={preferences.titleDisplayMode} onOpen={() => setSelectedId(game.id)} />)}</div> : <LibraryList games={visibleGames} titleMode={preferences.titleDisplayMode} onOpen={(game) => setSelectedId(game.id)} />}{visibleGames.length === 0 && <div className="no-results">没有符合当前条件的游戏</div>}</>}</section></div>
         ) : <HomeView games={visibleGames} titleMode={preferences.titleDisplayMode} onOpen={(game) => setSelectedId(game.id)} onLaunch={(game) => void launch(game)} onAdd={() => setScanning(true)} onShowAll={() => setFilter('all')} />}
       </main>
 
