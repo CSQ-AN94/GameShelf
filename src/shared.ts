@@ -100,12 +100,45 @@ export interface ProfileInput {
 
 export type ThemeMode = 'dark' | 'light';
 export type TitleDisplayMode = 'original' | 'chinese';
+export type LibraryViewMode = 'grid' | 'list';
 
 export interface AppPreferences {
   theme: ThemeMode;
   titleDisplayMode: TitleDisplayMode;
+  libraryViewMode: LibraryViewMode;
   safeView: boolean;
   sidebarCollapsed: boolean;
+}
+
+export interface LibraryScanCandidate {
+  id: string;
+  folderPath: string;
+  title: string;
+  titleOptions: { value: string; source: string }[];
+  chineseTitle: string;
+  type: GameType;
+  category: string;
+  contentRating: ContentRating;
+  executablePath: string;
+  launchProfiles: LaunchProfileInput[];
+  coverSourcePath: string | null;
+  engine: string | null;
+  issues: string[];
+  duplicatePath: boolean;
+  duplicateGameId: string | null;
+  relatedCandidateIds: string[];
+}
+
+export interface BatchImportInput extends NewGameInput {
+  launchProfiles: LaunchProfileInput[];
+}
+
+export interface BulkEditGamesInput {
+  gameIds: string[];
+  status?: GameStatus;
+  category?: string;
+  hideInSafeView?: boolean;
+  addCollectionIds?: string[];
 }
 
 export interface DataOperationResult {
@@ -127,6 +160,9 @@ export interface GameShelfApi {
   listGames: () => Promise<Game[]>;
   getGame: (id: string) => Promise<Game | null>;
   addGame: (input: NewGameInput) => Promise<Game>;
+  scanLibrary: () => Promise<LibraryScanCandidate[] | null>;
+  importGames: (inputs: BatchImportInput[]) => Promise<Game[]>;
+  bulkEditGames: (input: BulkEditGamesInput) => Promise<Game[]>;
   removeGame: (id: string) => Promise<void>;
   updateGameStatus: (id: string, status: GameStatus) => Promise<Game>;
   updateGameCategory: (id: string, category: string) => Promise<Game>;

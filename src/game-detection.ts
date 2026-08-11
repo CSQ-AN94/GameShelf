@@ -4,9 +4,9 @@ import type { GameSetupAnalysis, GameType } from './shared';
 
 export type ScannedEntry = { relativePath: string; isDirectory: boolean };
 
-const ignoredExecutable = /(?:unins|uninstall|crashhandler|pythonw?|zsync|dxwebsetup|userconf|config|setup|patch|update|part\d|delfile|ファイル破損|セーブデータフォルダ|(?:^|\/)(?:lib|补丁|原版备份|备份|全cg存档)(?:\/|$))/i;
+export const ignoredExecutable = /(?:unins|uninstall|crashhandler|pythonw?|zsync|dxwebsetup|userconf|config|setup|patch|update|part\d|delfile|ファイル破損|セーブデータフォルダ|(?:^|\/)(?:lib|补丁|原版备份|备份|全cg存档)(?:\/|$))/i;
 
-async function scanDirectory(root: string): Promise<ScannedEntry[]> {
+export async function scanDirectory(root: string): Promise<ScannedEntry[]> {
   const entries: ScannedEntry[] = [];
   const queue = [{ directory: root, relativePath: '', depth: 0 }];
   while (queue.length > 0 && entries.length < 4000) {

@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
 import { mkdirSync } from 'node:fs';
 import { copyFile, mkdir, readFile, stat, unlink, writeFile } from 'node:fs/promises';
 import os from 'node:os';
@@ -9,7 +10,8 @@ import { appendLog, clearRunning, createStoreBackup, libraryPaths, logTail, mark
 import { GameStore, inspectGameDatabase } from './game-store';
 import { analyzeExecutable } from './game-detection';
 import { detachedGameProcessOptions, parseLaunchArguments } from './launch';
-import type { AppPreferences, Game, GameSettingsInput, GameStatus, LaunchProfileInput, NewGameInput, PickedImage, ProfileInput, UserProfile } from './shared';
+import { scanLibraryRoots } from './library-scan';
+import type { AppPreferences, BatchImportInput, BulkEditGamesInput, Game, GameSettingsInput, GameStatus, LaunchProfileInput, NewGameInput, PickedImage, ProfileInput, UserProfile } from './shared';
 
 declare const MAIN_WINDOW_VITE_DEV_SERVER_URL: string | undefined;
 declare const MAIN_WINDOW_VITE_NAME: string;
@@ -146,6 +148,7 @@ function readPreferences(): AppPreferences {
   return {
     theme: preferenceStore.getSetting('appearance.theme') === 'light' ? 'light' : 'dark',
     titleDisplayMode: preferenceStore.getSetting('appearance.titleDisplayMode') === 'chinese' ? 'chinese' : 'original',
+    libraryViewMode: preferenceStore.getSetting('appearance.libraryViewMode') === 'list' ? 'list' : 'grid',
     safeView: preferenceStore.getSetting('privacy.safeView') === 'true',
     sidebarCollapsed: preferenceStore.getSetting('appearance.sidebarCollapsed') === 'true'
   };
@@ -230,6 +233,63 @@ function registerIpc(): void {
       game = requireStore().setCoverPath(game.id, coverPath);
     }
     return hydrateGame(game);
+  });
+
+  ipcMain.handle('games:scan-library', async (event) => {
+    assertTrusted(event);
+    const selected = await dialog.showOpenDialog(mainWindow!, {
+      title: '选择要扫描的游戏目录',
+      properties: ['openDirectory', 'multiSelections']
+    });
+    if (selected.canceled || selected.filePaths.length === 0) return null;
+    return scanLibraryRoots(selected.filePaths, requireStore().listGames());
+  });
+
+  ipcMain.handle('games:import', async (event, inputs: BatchImportInput[]) => {
+    assertTrusted(event);
+    if (!Array.isArray(inputs) || inputs.length === 0 || inputs.length > 500) throw new Error('请选择 1 至 500 个扫描结果');
+    const records = [];
+    const copiedArtwork: { id: string; path: string }[] = [];
+    try {
+      for (const input of inputs) {
+        if (!input || typeof input.title !== 'string' || !input.title.trim() || input.title.trim().length > 200) throw new Error('扫描结果中的游戏名称无效');
+        if (!gameTypes.has(input.type) || !contentRatings.has(input.contentRating) || (input.status && !gameStatuses.has(input.status))) throw new Error('扫描结果中的游戏资料无效');
+        if (typeof input.category !== 'string' || !input.category.trim() || input.category.trim().length > 60) throw new Error('扫描结果中的分类无效');
+        if (!Array.isArray(input.launchProfiles) || input.launchProfiles.length === 0 || input.launchProfiles.length > 16) throw new Error('每个游戏必须包含 1 至 16 个启动项');
+        for (const profile of input.launchProfiles) {
+          if (!profile || typeof profile.name !== 'string' || !profile.name.trim() || profile.name.trim().length > 60 || typeof profile.executablePath !== 'string') throw new Error('扫描结果中的启动项无效');
+          await validateExecutable(profile.executablePath);
+        }
+        if (!input.launchProfiles.some((profile) => profile.executablePath === input.executablePath)) throw new Error('默认启动项不在扫描结果中');
+        const id = randomUUID();
+        let coverPath: string | null = null;
+        if (input.coverSourcePath) {
+          if (typeof input.coverSourcePath !== 'string' || !path.isAbsolute(input.coverSourcePath)) throw new Error('扫描结果中的封面路径无效');
+          coverPath = await copyArtwork(id, input.coverSourcePath, 'covers');
+          copiedArtwork.push({ id, path: coverPath });
+        }
+        records.push({ ...input, id, coverPath, workingDirectory: path.dirname(input.executablePath) });
+      }
+      return Promise.all(requireStore().importGames(records).map(hydrateGame));
+    } catch (error) {
+      await Promise.all(copiedArtwork.map((item) => removeManagedArtwork(item.id, item.path, 'covers')));
+      throw error;
+    }
+  });
+
+  ipcMain.handle('games:bulk-edit', async (event, input: BulkEditGamesInput) => {
+    assertTrusted(event);
+    if (!input || !Array.isArray(input.gameIds) || input.gameIds.length === 0 || input.gameIds.length > 500 || !input.gameIds.every((id) => typeof id === 'string')) throw new Error('请选择要整理的游戏');
+    const gameIds = [...new Set(input.gameIds)];
+    if (gameIds.some((id) => !requireStore().getGame(id))) throw new Error('批量整理中包含不存在的游戏');
+    if (input.status != null && !gameStatuses.has(input.status)) throw new Error('无效的游玩状态');
+    if (input.category != null && (typeof input.category !== 'string' || !input.category.trim() || input.category.trim().length > 60)) throw new Error('无效的游戏分类');
+    if (input.hideInSafeView != null && typeof input.hideInSafeView !== 'boolean') throw new Error('无效的隐私设置');
+    if (input.addCollectionIds != null && (!Array.isArray(input.addCollectionIds) || !input.addCollectionIds.every((id) => typeof id === 'string'))) throw new Error('无效的合集设置');
+    const collectionIds = [...new Set(input.addCollectionIds ?? [])];
+    const validCollectionIds = new Set(requireStore().listCollections().map((collection) => collection.id));
+    if (collectionIds.some((id) => !validCollectionIds.has(id))) throw new Error('批量整理中包含不存在的合集');
+    return Promise.all(requireStore().bulkEditGames({ ...input, gameIds, addCollectionIds: collectionIds }).map(hydrateGame));
   });
 
   ipcMain.handle('games:remove', async (event, id: unknown) => {
@@ -375,10 +435,11 @@ function registerIpc(): void {
 
   ipcMain.handle('preferences:save', (event, preferences: AppPreferences) => {
     assertTrusted(event);
-    if (!preferences || !['dark', 'light'].includes(preferences.theme) || !['original', 'chinese'].includes(preferences.titleDisplayMode) || typeof preferences.safeView !== 'boolean' || typeof preferences.sidebarCollapsed !== 'boolean') throw new Error('无效的应用设置');
+    if (!preferences || !['dark', 'light'].includes(preferences.theme) || !['original', 'chinese'].includes(preferences.titleDisplayMode) || !['grid', 'list'].includes(preferences.libraryViewMode) || typeof preferences.safeView !== 'boolean' || typeof preferences.sidebarCollapsed !== 'boolean') throw new Error('无效的应用设置');
     const preferenceStore = requireStore();
     preferenceStore.setSetting('appearance.theme', preferences.theme);
     preferenceStore.setSetting('appearance.titleDisplayMode', preferences.titleDisplayMode);
+    preferenceStore.setSetting('appearance.libraryViewMode', preferences.libraryViewMode);
     preferenceStore.setSetting('privacy.safeView', String(preferences.safeView));
     preferenceStore.setSetting('appearance.sidebarCollapsed', String(preferences.sidebarCollapsed));
     return readPreferences();

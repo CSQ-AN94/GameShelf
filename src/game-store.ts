@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
+import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
-import type { Game, GameCollection, GameSettingsInput, GameStatus, LaunchProfile, LaunchProfileInput, NewGameInput } from './shared';
+import type { BatchImportInput, BulkEditGamesInput, Game, GameCollection, GameSettingsInput, GameStatus, LaunchProfile, LaunchProfileInput, NewGameInput } from './shared';
 
 export const DATABASE_SCHEMA_VERSION = 1;
 
@@ -9,6 +10,12 @@ export interface DatabaseInspection {
   schemaVersion: number;
   message: string;
 }
+
+export type BatchImportRecord = Omit<BatchImportInput, 'coverSourcePath'> & {
+  id: string;
+  workingDirectory: string;
+  coverPath: string | null;
+};
 
 function quickCheck(database: DatabaseSync): string[] {
   return (database.prepare('PRAGMA quick_check').all() as { quick_check: string }[]).map((row) => row.quick_check);
@@ -294,14 +301,17 @@ export class GameStore {
   }
 
   createGame(input: NewGameInput & { workingDirectory: string }): Game {
-    const id = randomUUID();
+    return this.insertGame(randomUUID(), input, null);
+  }
+
+  private insertGame(id: string, input: NewGameInput & { workingDirectory: string }, coverPath: string | null): Game {
     const now = new Date().toISOString();
     this.database
       .prepare(`
         INSERT INTO games (
           id, title, chinese_title, type, category, content_rating, executable_path, working_directory,
-          launch_arguments, developer, description, status, wishlist, hide_in_safe_view, completed_at, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          launch_arguments, cover_path, developer, description, status, wishlist, hide_in_safe_view, completed_at, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `)
       .run(
         id,
@@ -313,6 +323,7 @@ export class GameStore {
         input.executablePath,
         input.workingDirectory,
         input.launchArguments?.trim() ?? '',
+        coverPath,
         input.developer?.trim() ?? '',
         input.description?.trim() ?? '',
         input.status ?? 'unplayed',
@@ -327,6 +338,60 @@ export class GameStore {
       VALUES (?, ?, '默认启动', ?, ?, ?, 1, ?, ?)
     `).run(id, id, input.executablePath, input.workingDirectory, input.launchArguments?.trim() ?? '', now, now);
     return this.getGame(id)!;
+  }
+
+  importGames(inputs: BatchImportRecord[]): Game[] {
+    const pathKey = (value: string) => value.replaceAll('\\', '/').toLocaleLowerCase();
+    const knownPaths = new Set((this.database.prepare('SELECT executable_path FROM launch_profiles').all() as { executable_path: string }[]).map((row) => pathKey(row.executable_path)));
+    for (const input of inputs) {
+      for (const profile of input.launchProfiles) {
+        const key = pathKey(profile.executablePath);
+        if (knownPaths.has(key)) throw new Error(`启动路径已存在：${profile.executablePath}`);
+        knownPaths.add(key);
+      }
+    }
+    this.database.exec('BEGIN IMMEDIATE');
+    try {
+      const imported: Game[] = [];
+      for (const input of inputs) {
+        const game = this.insertGame(input.id, input, input.coverPath);
+        const now = new Date().toISOString();
+        for (const profile of input.launchProfiles.filter((item) => pathKey(item.executablePath) !== pathKey(input.executablePath))) {
+          this.database.prepare(`
+            INSERT INTO launch_profiles (id, game_id, name, executable_path, working_directory, launch_arguments, is_default, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?)
+          `).run(randomUUID(), game.id, profile.name.trim(), profile.executablePath, (profile.executablePath.includes('\\') ? path.win32 : path).dirname(profile.executablePath), profile.launchArguments?.trim() ?? '', now, now);
+        }
+        imported.push(this.getGame(game.id)!);
+      }
+      this.database.exec('COMMIT');
+      return imported;
+    } catch (error) {
+      this.database.exec('ROLLBACK');
+      throw error;
+    }
+  }
+
+  bulkEditGames(input: BulkEditGamesInput): Game[] {
+    const now = new Date().toISOString();
+    this.database.exec('BEGIN IMMEDIATE');
+    try {
+      for (const gameId of input.gameIds) {
+        if (input.status) this.database.prepare(`
+          UPDATE games SET status = ?, completed_at = CASE WHEN ? = 'completed' THEN COALESCE(completed_at, ?) ELSE NULL END, updated_at = ? WHERE id = ?
+        `).run(input.status, input.status, now, now, gameId);
+        if (input.category) this.database.prepare('UPDATE games SET category = ?, updated_at = ? WHERE id = ?').run(input.category.trim(), now, gameId);
+        if (input.hideInSafeView != null) this.database.prepare('UPDATE games SET hide_in_safe_view = ?, updated_at = ? WHERE id = ?').run(input.hideInSafeView ? 1 : 0, now, gameId);
+        for (const collectionId of input.addCollectionIds ?? []) {
+          this.database.prepare('INSERT OR IGNORE INTO collection_games (collection_id, game_id) VALUES (?, ?)').run(collectionId, gameId);
+        }
+      }
+      this.database.exec('COMMIT');
+      return input.gameIds.map((id) => this.getGame(id)!);
+    } catch (error) {
+      this.database.exec('ROLLBACK');
+      throw error;
+    }
   }
 
   setCoverPath(id: string, coverPath: string): Game {

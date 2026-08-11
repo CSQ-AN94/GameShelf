@@ -94,4 +94,44 @@ describe('GameStore', () => {
     assert.equal(store.getGame(kept.id)?.title, 'Keep Me');
     store.close();
   });
+
+  it('imports and organizes a reviewed batch atomically', () => {
+    const store = new GameStore(':memory:');
+    const collection = store.createCollection('系列作品');
+    const imported = store.importGames([{
+      id: 'batch-game',
+      title: 'Batch Game',
+      type: 'visual_novel',
+      category: 'Galgame',
+      contentRating: 'general',
+      executablePath: 'C:\\Games\\Batch\\game.exe',
+      workingDirectory: 'C:\\Games\\Batch',
+      coverPath: null,
+      launchProfiles: [
+        { name: '默认启动', executablePath: 'C:\\Games\\Batch\\game.exe', isDefault: true },
+        { name: '汉化版', executablePath: 'C:\\Games\\Batch\\game_chs.exe', isDefault: false }
+      ]
+    }]);
+
+    const organized = store.bulkEditGames({ gameIds: [imported[0]!.id], status: 'playing', category: '收藏', hideInSafeView: true, addCollectionIds: [collection.id] });
+    assert.equal(organized[0]?.launchProfiles.length, 2);
+    assert.equal(organized[0]?.status, 'playing');
+    assert.equal(organized[0]?.category, '收藏');
+    assert.equal(organized[0]?.hideInSafeView, true);
+    assert.deepEqual(store.listCollections()[0]?.gameIds, ['batch-game']);
+
+    assert.throws(() => store.importGames([{
+      id: 'duplicate',
+      title: 'Duplicate',
+      type: 'other',
+      category: '其他游戏',
+      contentRating: 'general',
+      executablePath: 'C:\\Games\\Batch\\GAME.EXE',
+      workingDirectory: 'C:\\Games\\Batch',
+      coverPath: null,
+      launchProfiles: [{ name: '默认启动', executablePath: 'C:\\Games\\Batch\\GAME.EXE', isDefault: true }]
+    }]), /启动路径已存在/);
+    assert.equal(store.listGames().length, 1);
+    store.close();
+  });
 });
