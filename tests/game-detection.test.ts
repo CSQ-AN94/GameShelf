@@ -30,4 +30,11 @@ describe('game setup detection', () => {
     assert.ok(result.alternativeExecutables.some((item) => item.endsWith('BGI.chs.exe')));
     assert.equal(result.alternativeExecutables.length, 1);
   });
+
+  it('recognizes bare adult, fix, and voice package directories', () => {
+    const names = ['R18', 'Adult', 'Fix', '修复', 'Voice', '语音'];
+    const result = classifyGameSetup('G:\\GalGame\\Example\\Game.exe', names.map(directory));
+
+    assert.deepEqual(result.patchDirectories.map((item) => item.split('\\').pop()), names);
+  });
 });
