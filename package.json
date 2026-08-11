@@ -1,9 +1,9 @@
 {
   "name": "gameshelf",
   "productName": "GameShelf",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "A local-first private game library for Windows.",
-  "main": ".vite/build/main.js",
+  "main": ".vite/build/main.cjs",
   "private": true,
   "type": "module",
   "license": "UNLICENSED",

@@ -87,6 +87,76 @@ export interface GameCollection {
   createdAt: string;
 }
 
+export type PackageKind = 'mod' | 'translation' | 'adult_patch' | 'voice' | 'fix' | 'other';
+
+export interface GamePackage {
+  id: string;
+  gameId: string;
+  name: string;
+  kind: PackageKind;
+  path: string;
+  disabledPath: string;
+  enabled: boolean;
+  detected: boolean;
+  updatedAt: string;
+}
+
+export interface PackageChange {
+  id: string;
+  packageId: string;
+  packageName: string;
+  enabledBefore: boolean;
+  enabledAfter: boolean;
+  backupPath: string;
+  createdAt: string;
+}
+
+export interface PackageChangePreview {
+  token: string;
+  packageId: string;
+  packageName: string;
+  enabled: boolean;
+  sourcePath: string;
+  targetPath: string;
+  backupPath: string;
+}
+
+export interface SaveSnapshot {
+  id: string;
+  branchId: string;
+  name: string;
+  path: string;
+  kind: 'manual' | 'before_restore';
+  manifestHash: string;
+  createdAt: string;
+}
+
+export interface SaveBranch {
+  id: string;
+  locationId: string;
+  name: string;
+  createdAt: string;
+  snapshots: SaveSnapshot[];
+}
+
+export interface SaveLocation {
+  id: string;
+  gameId: string;
+  name: string;
+  path: string;
+  createdAt: string;
+  branches: SaveBranch[];
+}
+
+export interface SaveRestorePreview {
+  token: string;
+  snapshotId: string;
+  snapshotName: string;
+  sourcePath: string;
+  targetPath: string;
+  preRestoreSnapshotPath: string;
+}
+
 export interface UserProfile {
   name: string;
   avatarPath: string | null;
@@ -178,6 +248,19 @@ export interface GameShelfApi {
   listCollections: () => Promise<GameCollection[]>;
   createCollection: (name: string) => Promise<GameCollection>;
   setGameCollections: (gameId: string, collectionIds: string[]) => Promise<void>;
+  setCollectionOrder: (collectionId: string, gameIds: string[]) => Promise<GameCollection>;
+  listPackages: (gameId: string) => Promise<GamePackage[]>;
+  detectPackages: (gameId: string) => Promise<GamePackage[]>;
+  listPackageChanges: (gameId: string) => Promise<PackageChange[]>;
+  previewPackageChange: (gameId: string, packageId: string, enabled: boolean) => Promise<PackageChangePreview>;
+  applyPackageChange: (token: string) => Promise<GamePackage>;
+  pickSaveDirectory: () => Promise<string | null>;
+  listSaveLocations: (gameId: string) => Promise<SaveLocation[]>;
+  addSaveLocation: (gameId: string, name: string, path: string) => Promise<SaveLocation[]>;
+  createSaveBranch: (locationId: string, name: string) => Promise<SaveLocation[]>;
+  createSaveSnapshot: (branchId: string, name: string) => Promise<SaveLocation[]>;
+  previewSaveRestore: (snapshotId: string) => Promise<SaveRestorePreview>;
+  applySaveRestore: (token: string) => Promise<SaveLocation[]>;
   getProfile: () => Promise<UserProfile>;
   saveProfile: (input: ProfileInput) => Promise<UserProfile>;
   getPreferences: () => Promise<AppPreferences>;

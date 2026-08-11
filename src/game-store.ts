@@ -1,9 +1,9 @@
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
-import type { BatchImportInput, BulkEditGamesInput, Game, GameCollection, GameSettingsInput, GameStatus, LaunchProfile, LaunchProfileInput, NewGameInput } from './shared';
+import type { BatchImportInput, BulkEditGamesInput, Game, GameCollection, GamePackage, GameSettingsInput, GameStatus, LaunchProfile, LaunchProfileInput, NewGameInput, PackageChange, PackageKind, SaveBranch, SaveLocation, SaveSnapshot } from './shared';
 
-export const DATABASE_SCHEMA_VERSION = 1;
+export const DATABASE_SCHEMA_VERSION = 2;
 
 export interface DatabaseInspection {
   valid: boolean;
@@ -222,6 +222,56 @@ export class GameStore {
         key TEXT PRIMARY KEY,
         value TEXT NOT NULL
       );
+
+      CREATE TABLE IF NOT EXISTS game_packages (
+        id TEXT PRIMARY KEY,
+        game_id TEXT NOT NULL REFERENCES games(id) ON DELETE CASCADE,
+        name TEXT NOT NULL,
+        kind TEXT NOT NULL,
+        path TEXT NOT NULL,
+        disabled_path TEXT NOT NULL,
+        enabled INTEGER NOT NULL,
+        detected INTEGER NOT NULL DEFAULT 1,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        UNIQUE(game_id, path)
+      );
+
+      CREATE TABLE IF NOT EXISTS package_changes (
+        id TEXT PRIMARY KEY,
+        package_id TEXT NOT NULL REFERENCES game_packages(id) ON DELETE CASCADE,
+        enabled_before INTEGER NOT NULL,
+        enabled_after INTEGER NOT NULL,
+        backup_path TEXT NOT NULL,
+        created_at TEXT NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS save_locations (
+        id TEXT PRIMARY KEY,
+        game_id TEXT NOT NULL REFERENCES games(id) ON DELETE CASCADE,
+        name TEXT NOT NULL,
+        path TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        UNIQUE(game_id, path)
+      );
+
+      CREATE TABLE IF NOT EXISTS save_branches (
+        id TEXT PRIMARY KEY,
+        location_id TEXT NOT NULL REFERENCES save_locations(id) ON DELETE CASCADE,
+        name TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        UNIQUE(location_id, name COLLATE NOCASE)
+      );
+
+      CREATE TABLE IF NOT EXISTS save_snapshots (
+        id TEXT PRIMARY KEY,
+        branch_id TEXT NOT NULL REFERENCES save_branches(id) ON DELETE CASCADE,
+        name TEXT NOT NULL,
+        snapshot_path TEXT NOT NULL UNIQUE,
+        kind TEXT NOT NULL,
+        manifest_hash TEXT NOT NULL,
+        created_at TEXT NOT NULL
+      );
     `);
     const gameColumns = this.database.prepare('PRAGMA table_info(games)').all() as { name: string }[];
     if (!gameColumns.some((column) => column.name === 'completed_at')) {
@@ -249,6 +299,10 @@ export class GameStore {
       this.database.exec('ALTER TABLE games ADD COLUMN hide_in_safe_view INTEGER NOT NULL DEFAULT 0');
       this.database.exec("UPDATE games SET hide_in_safe_view = 1 WHERE content_rating = 'r18'");
     }
+    const collectionGameColumns = this.database.prepare('PRAGMA table_info(collection_games)').all() as { name: string }[];
+    if (!collectionGameColumns.some((column) => column.name === 'position')) {
+      this.database.exec('ALTER TABLE collection_games ADD COLUMN position INTEGER NOT NULL DEFAULT 0');
+    }
     this.database.exec(`
       INSERT INTO launch_profiles (
         id, game_id, name, executable_path, working_directory, launch_arguments, is_default, created_at, updated_at
@@ -263,7 +317,7 @@ export class GameStore {
     return (this.database.prepare('PRAGMA user_version').get() as { user_version: number }).user_version;
   }
 
-  getDiagnostics(): { schemaVersion: number; integrity: string; games: number; collections: number; launchProfiles: number; playSessions: number } {
+  getDiagnostics(): { schemaVersion: number; integrity: string; games: number; collections: number; launchProfiles: number; playSessions: number; packages: number; saveSnapshots: number } {
     const count = (table: string) => (this.database.prepare(`SELECT count(*) AS count FROM ${table}`).get() as { count: number }).count;
     return {
       schemaVersion: this.getSchemaVersion(),
@@ -271,7 +325,9 @@ export class GameStore {
       games: count('games'),
       collections: count('collections'),
       launchProfiles: count('launch_profiles'),
-      playSessions: count('play_sessions')
+      playSessions: count('play_sessions'),
+      packages: count('game_packages'),
+      saveSnapshots: count('save_snapshots')
     };
   }
 
@@ -383,7 +439,7 @@ export class GameStore {
         if (input.category) this.database.prepare('UPDATE games SET category = ?, updated_at = ? WHERE id = ?').run(input.category.trim(), now, gameId);
         if (input.hideInSafeView != null) this.database.prepare('UPDATE games SET hide_in_safe_view = ?, updated_at = ? WHERE id = ?').run(input.hideInSafeView ? 1 : 0, now, gameId);
         for (const collectionId of input.addCollectionIds ?? []) {
-          this.database.prepare('INSERT OR IGNORE INTO collection_games (collection_id, game_id) VALUES (?, ?)').run(collectionId, gameId);
+          this.database.prepare('INSERT OR IGNORE INTO collection_games (collection_id, game_id, position) VALUES (?, ?, COALESCE((SELECT max(position) + 1 FROM collection_games WHERE collection_id = ?), 0))').run(collectionId, gameId, collectionId);
         }
       }
       this.database.exec('COMMIT');
@@ -513,7 +569,7 @@ export class GameStore {
 
   listCollections(): GameCollection[] {
     const rows = this.database.prepare('SELECT id, name, created_at FROM collections ORDER BY name COLLATE NOCASE').all() as { id: string; name: string; created_at: string }[];
-    const memberships = this.database.prepare('SELECT game_id FROM collection_games WHERE collection_id = ? ORDER BY game_id');
+    const memberships = this.database.prepare('SELECT game_id FROM collection_games WHERE collection_id = ? ORDER BY position, rowid');
     return rows.map((row) => ({
       id: row.id,
       name: row.name,
@@ -533,13 +589,133 @@ export class GameStore {
     this.database.exec('BEGIN IMMEDIATE');
     try {
       this.database.prepare('DELETE FROM collection_games WHERE game_id = ?').run(gameId);
-      const insert = this.database.prepare('INSERT INTO collection_games (collection_id, game_id) VALUES (?, ?)');
-      for (const collectionId of collectionIds) insert.run(collectionId, gameId);
+      const insert = this.database.prepare('INSERT INTO collection_games (collection_id, game_id, position) VALUES (?, ?, COALESCE((SELECT max(position) + 1 FROM collection_games WHERE collection_id = ?), 0))');
+      for (const collectionId of collectionIds) insert.run(collectionId, gameId, collectionId);
       this.database.exec('COMMIT');
     } catch (error) {
       this.database.exec('ROLLBACK');
       throw error;
     }
+  }
+
+  setCollectionOrder(collectionId: string, gameIds: string[]): GameCollection {
+    const current = this.listCollections().find((collection) => collection.id === collectionId);
+    if (!current || current.gameIds.length !== gameIds.length || current.gameIds.some((id) => !gameIds.includes(id))) throw new Error('合集顺序必须包含全部现有作品');
+    this.database.exec('BEGIN IMMEDIATE');
+    try {
+      const update = this.database.prepare('UPDATE collection_games SET position = ? WHERE collection_id = ? AND game_id = ?');
+      gameIds.forEach((gameId, index) => update.run(index, collectionId, gameId));
+      this.database.exec('COMMIT');
+    } catch (error) {
+      this.database.exec('ROLLBACK');
+      throw error;
+    }
+    return this.listCollections().find((collection) => collection.id === collectionId)!;
+  }
+
+  listPackages(gameId: string): GamePackage[] {
+    return (this.database.prepare('SELECT id, game_id, name, kind, path, disabled_path, enabled, detected, updated_at FROM game_packages WHERE game_id = ? ORDER BY name COLLATE NOCASE').all(gameId) as { id: string; game_id: string; name: string; kind: PackageKind; path: string; disabled_path: string; enabled: number; detected: number; updated_at: string }[]).map((row) => ({
+      id: row.id, gameId: row.game_id, name: row.name, kind: row.kind, path: row.path, disabledPath: row.disabled_path, enabled: Boolean(row.enabled), detected: Boolean(row.detected), updatedAt: row.updated_at
+    }));
+  }
+
+  getPackage(gameId: string, packageId: string): GamePackage | null {
+    return this.listPackages(gameId).find((item) => item.id === packageId) ?? null;
+  }
+
+  upsertDetectedPackages(gameId: string, inputs: { name: string; kind: PackageKind; path: string; disabledPath: string; enabled: boolean }[]): GamePackage[] {
+    const now = new Date().toISOString();
+    const upsert = this.database.prepare(`
+      INSERT INTO game_packages (id, game_id, name, kind, path, disabled_path, enabled, detected, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
+      ON CONFLICT(game_id, path) DO UPDATE SET name = excluded.name, kind = excluded.kind, disabled_path = excluded.disabled_path, enabled = excluded.enabled, detected = 1, updated_at = excluded.updated_at
+    `);
+    this.database.exec('BEGIN IMMEDIATE');
+    try {
+      for (const input of inputs) upsert.run(randomUUID(), gameId, input.name, input.kind, input.path, input.disabledPath, input.enabled ? 1 : 0, now, now);
+      this.database.exec('COMMIT');
+    } catch (error) {
+      this.database.exec('ROLLBACK');
+      throw error;
+    }
+    return this.listPackages(gameId);
+  }
+
+  recordPackageState(gameId: string, packageId: string, enabled: boolean, backupPath: string): GamePackage {
+    const item = this.getPackage(gameId, packageId);
+    if (!item) throw new Error('找不到这个 Package');
+    const now = new Date().toISOString();
+    this.database.exec('BEGIN IMMEDIATE');
+    try {
+      this.database.prepare('UPDATE game_packages SET enabled = ?, updated_at = ? WHERE id = ? AND game_id = ?').run(enabled ? 1 : 0, now, packageId, gameId);
+      this.database.prepare('INSERT INTO package_changes (id, package_id, enabled_before, enabled_after, backup_path, created_at) VALUES (?, ?, ?, ?, ?, ?)').run(randomUUID(), packageId, item.enabled ? 1 : 0, enabled ? 1 : 0, backupPath, now);
+      this.database.exec('COMMIT');
+    } catch (error) {
+      this.database.exec('ROLLBACK');
+      throw error;
+    }
+    return this.getPackage(gameId, packageId)!;
+  }
+
+  listPackageChanges(gameId: string): PackageChange[] {
+    return (this.database.prepare(`
+      SELECT changes.id, changes.package_id, packages.name AS package_name, changes.enabled_before, changes.enabled_after, changes.backup_path, changes.created_at
+      FROM package_changes changes JOIN game_packages packages ON packages.id = changes.package_id
+      WHERE packages.game_id = ? ORDER BY changes.created_at DESC LIMIT 100
+    `).all(gameId) as { id: string; package_id: string; package_name: string; enabled_before: number; enabled_after: number; backup_path: string; created_at: string }[]).map((row) => ({
+      id: row.id, packageId: row.package_id, packageName: row.package_name, enabledBefore: Boolean(row.enabled_before), enabledAfter: Boolean(row.enabled_after), backupPath: row.backup_path, createdAt: row.created_at
+    }));
+  }
+
+  listSaveLocations(gameId: string): SaveLocation[] {
+    const locations = this.database.prepare('SELECT id, game_id, name, path, created_at FROM save_locations WHERE game_id = ? ORDER BY created_at, name COLLATE NOCASE').all(gameId) as { id: string; game_id: string; name: string; path: string; created_at: string }[];
+    const branchesFor = this.database.prepare('SELECT id, location_id, name, created_at FROM save_branches WHERE location_id = ? ORDER BY created_at, name COLLATE NOCASE');
+    const snapshotsFor = this.database.prepare('SELECT id, branch_id, name, snapshot_path, kind, manifest_hash, created_at FROM save_snapshots WHERE branch_id = ? ORDER BY created_at DESC');
+    return locations.map((location) => ({
+      id: location.id, gameId: location.game_id, name: location.name, path: location.path, createdAt: location.created_at,
+      branches: (branchesFor.all(location.id) as { id: string; location_id: string; name: string; created_at: string }[]).map((branch): SaveBranch => ({
+        id: branch.id, locationId: branch.location_id, name: branch.name, createdAt: branch.created_at,
+        snapshots: (snapshotsFor.all(branch.id) as { id: string; branch_id: string; name: string; snapshot_path: string; kind: SaveSnapshot['kind']; manifest_hash: string; created_at: string }[]).map((snapshot) => ({ id: snapshot.id, branchId: snapshot.branch_id, name: snapshot.name, path: snapshot.snapshot_path, kind: snapshot.kind, manifestHash: snapshot.manifest_hash, createdAt: snapshot.created_at }))
+      }))
+    }));
+  }
+
+  createSaveLocation(gameId: string, name: string, savePath: string): SaveLocation {
+    const id = randomUUID();
+    const createdAt = new Date().toISOString();
+    this.database.prepare('INSERT INTO save_locations (id, game_id, name, path, created_at) VALUES (?, ?, ?, ?, ?)').run(id, gameId, name.trim(), savePath, createdAt);
+    return { id, gameId, name: name.trim(), path: savePath, createdAt, branches: [] };
+  }
+
+  createSaveBranch(locationId: string, name: string): SaveBranch {
+    const id = randomUUID();
+    const createdAt = new Date().toISOString();
+    this.database.prepare('INSERT INTO save_branches (id, location_id, name, created_at) VALUES (?, ?, ?, ?)').run(id, locationId, name.trim(), createdAt);
+    return { id, locationId, name: name.trim(), createdAt, snapshots: [] };
+  }
+
+  getSaveLocation(locationId: string): SaveLocation | null {
+    const row = this.database.prepare('SELECT game_id FROM save_locations WHERE id = ?').get(locationId) as { game_id: string } | undefined;
+    return row ? this.listSaveLocations(row.game_id).find((item) => item.id === locationId) ?? null : null;
+  }
+
+  getSaveLocationByBranch(branchId: string): SaveLocation | null {
+    const row = this.database.prepare('SELECT locations.game_id FROM save_branches branches JOIN save_locations locations ON locations.id = branches.location_id WHERE branches.id = ?').get(branchId) as { game_id: string } | undefined;
+    return row ? this.listSaveLocations(row.game_id).flatMap((location) => location.branches.some((branch) => branch.id === branchId) ? [location] : [])[0] ?? null : null;
+  }
+
+  getSaveSnapshot(snapshotId: string): { snapshot: SaveSnapshot; location: SaveLocation } | null {
+    const row = this.database.prepare('SELECT branches.location_id, locations.game_id FROM save_snapshots snapshots JOIN save_branches branches ON branches.id = snapshots.branch_id JOIN save_locations locations ON locations.id = branches.location_id WHERE snapshots.id = ?').get(snapshotId) as { location_id: string; game_id: string } | undefined;
+    if (!row) return null;
+    const location = this.listSaveLocations(row.game_id).find((item) => item.id === row.location_id)!;
+    const snapshot = location.branches.flatMap((branch) => branch.snapshots).find((item) => item.id === snapshotId)!;
+    return { snapshot, location };
+  }
+
+  addSaveSnapshot(branchId: string, id: string, name: string, snapshotPath: string, kind: SaveSnapshot['kind'], manifestHash: string): SaveSnapshot {
+    const createdAt = new Date().toISOString();
+    this.database.prepare('INSERT INTO save_snapshots (id, branch_id, name, snapshot_path, kind, manifest_hash, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)').run(id, branchId, name.trim(), snapshotPath, kind, manifestHash, createdAt);
+    return { id, branchId, name: name.trim(), path: snapshotPath, kind, manifestHash, createdAt };
   }
 
   getSetting(key: string): string | null {

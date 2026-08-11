@@ -134,4 +134,28 @@ describe('GameStore', () => {
     assert.equal(store.listGames().length, 1);
     store.close();
   });
+
+  it('records reversible packages, save branches, snapshots, and series order', () => {
+    const store = new GameStore(':memory:');
+    const first = store.createGame({ title: 'First', type: 'other', contentRating: 'general', executablePath: 'C:\\Series\\First\\game.exe', workingDirectory: 'C:\\Series\\First' });
+    const second = store.createGame({ title: 'Second', type: 'other', contentRating: 'general', executablePath: 'C:\\Series\\Second\\game.exe', workingDirectory: 'C:\\Series\\Second' });
+    const collection = store.createCollection('Series');
+    store.setGameCollections(first.id, [collection.id]);
+    store.setGameCollections(second.id, [collection.id]);
+    assert.deepEqual(store.setCollectionOrder(collection.id, [second.id, first.id]).gameIds, [second.id, first.id]);
+
+    const detected = store.upsertDetectedPackages(first.id, [{ name: 'Mods', kind: 'mod', path: 'C:\\Series\\First\\Mods', disabledPath: 'C:\\Series\\First\\Mods.gameshelf-disabled', enabled: true }]);
+    const changed = store.recordPackageState(first.id, detected[0]!.id, false, 'C:\\GameShelf\\package-backups\\one');
+    assert.equal(changed.enabled, false);
+    assert.deepEqual(store.listPackageChanges(first.id).map((item) => [item.enabledBefore, item.enabledAfter]), [[true, false]]);
+
+    const location = store.createSaveLocation(first.id, '本地存档', 'C:\\Series\\First\\SaveData');
+    const branch = store.createSaveBranch(location.id, '主线');
+    store.addSaveSnapshot(branch.id, 'snapshot-one', '开始前', 'C:\\GameShelf\\save-snapshots\\one', 'manual', 'a'.repeat(64));
+    const saved = store.listSaveLocations(first.id)[0];
+    assert.equal(saved?.branches[0]?.name, '主线');
+    assert.equal(saved?.branches[0]?.snapshots[0]?.name, '开始前');
+    assert.equal(store.getSaveSnapshot('snapshot-one')?.location.path, 'C:\\Series\\First\\SaveData');
+    store.close();
+  });
 });

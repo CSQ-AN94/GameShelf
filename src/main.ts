@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { mkdirSync } from 'node:fs';
-import { copyFile, mkdir, readFile, stat, unlink, writeFile } from 'node:fs/promises';
+import { copyFile, lstat, mkdir, readFile, stat, unlink, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { app, BrowserWindow, dialog, ipcMain, Menu, shell, type IpcMainInvokeEvent } from 'electron';
@@ -9,9 +9,10 @@ import started from 'electron-squirrel-startup';
 import { appendLog, clearRunning, createStoreBackup, libraryPaths, logTail, markRunning, prepareDatabase, restoreStore, type StartupSafetyResult } from './data-safety';
 import { GameStore, inspectGameDatabase } from './game-store';
 import { analyzeExecutable } from './game-detection';
+import { createTreeSnapshot, isPathInside, renameDirectorySafely, restoreTreeSnapshot, validateTreeSnapshot } from './file-safety';
 import { detachedGameProcessOptions, parseLaunchArguments } from './launch';
 import { scanLibraryRoots } from './library-scan';
-import type { AppPreferences, BatchImportInput, BulkEditGamesInput, Game, GameSettingsInput, GameStatus, LaunchProfileInput, NewGameInput, PickedImage, ProfileInput, UserProfile } from './shared';
+import type { AppPreferences, BatchImportInput, BulkEditGamesInput, Game, GamePackage, GameSettingsInput, GameStatus, LaunchProfileInput, NewGameInput, PackageChangePreview, PackageKind, PickedImage, ProfileInput, SaveRestorePreview, UserProfile } from './shared';
 
 declare const MAIN_WINDOW_VITE_DEV_SERVER_URL: string | undefined;
 declare const MAIN_WINDOW_VITE_NAME: string;
@@ -35,6 +36,8 @@ const startupMessages: string[] = [];
 const gameTypes = new Set(['visual_novel', 'rpg', 'simulation', 'action', 'other']);
 const contentRatings = new Set(['general', 'mature', 'r18']);
 const gameStatuses = new Set(['unplayed', 'playing', 'completed', 'paused']);
+const pendingPackageChanges = new Map<string, { gameId: string; preview: PackageChangePreview; createdAt: number }>();
+const pendingSaveRestores = new Map<string, { gameId: string; branchId: string; preview: SaveRestorePreview; preRestoreSnapshotId: string; createdAt: number }>();
 
 function assertTrusted(event: IpcMainInvokeEvent): void {
   if (!mainWindow || event.sender !== mainWindow.webContents) {
@@ -57,6 +60,47 @@ function log(level: 'INFO' | 'WARN' | 'ERROR', message: string): void {
   } catch {
     // Logging must never replace the original failure.
   }
+}
+
+function operationStamp(): string {
+  return new Date().toISOString().replace(/[-:.TZ]/g, '');
+}
+
+function packageKind(directory: string): PackageKind {
+  const name = path.basename(directory).toLocaleLowerCase();
+  if (/(?:汉化|translation|chinese)/i.test(name)) return 'translation';
+  if (/(?:无码|r18|adult)/i.test(name)) return 'adult_patch';
+  if (/(?:voice|语音)/i.test(name)) return 'voice';
+  if (/(?:fix|修复)/i.test(name)) return 'fix';
+  if (/(?:mod|bepinex|melonloader)/i.test(name)) return 'mod';
+  return 'other';
+}
+
+async function detectGamePackages(game: Game): Promise<GamePackage[]> {
+  const detected: string[] = [];
+  for (const profile of game.launchProfiles) {
+    const analysis = await analyzeExecutable(profile.executablePath);
+    detected.push(...analysis.modDirectories, ...analysis.patchDirectories);
+  }
+  const unique = [...new Map(detected.map((item) => [path.resolve(item).toLocaleLowerCase(), path.resolve(item)])).values()]
+    .sort((left, right) => left.length - right.length)
+    .filter((candidate, index, values) => !values.slice(0, index).some((parent) => isPathInside(parent, candidate)));
+  const roots = game.launchProfiles.map((profile) => profile.workingDirectory);
+  const records = unique.filter((candidate) => roots.some((root) => isPathInside(root, candidate))).map((candidate) => ({
+    name: path.basename(candidate),
+    kind: packageKind(candidate),
+    path: candidate,
+    disabledPath: `${candidate}.gameshelf-disabled`,
+    enabled: true
+  }));
+  return requireStore().upsertDetectedPackages(game.id, records);
+}
+
+function requireFresh<T>(map: Map<string, T & { createdAt: number }>, token: string): T & { createdAt: number } {
+  const pending = map.get(token);
+  map.delete(token);
+  if (!pending || Date.now() - pending.createdAt > 10 * 60 * 1000) throw new Error('操作预览已过期，请重新预览');
+  return pending;
 }
 
 async function imageDataUrl(filePath: string | null): Promise<string | null> {
@@ -410,6 +454,162 @@ function registerIpc(): void {
     requireStore().setGameCollections(gameId, [...new Set(collectionIds as string[])]);
   });
 
+  ipcMain.handle('collections:set-order', (event, collectionId: unknown, gameIds: unknown) => {
+    assertTrusted(event);
+    if (typeof collectionId !== 'string' || !Array.isArray(gameIds) || !gameIds.every((id) => typeof id === 'string') || new Set(gameIds).size !== gameIds.length) throw new Error('无效的作品顺序');
+    return requireStore().setCollectionOrder(collectionId, gameIds as string[]);
+  });
+
+  ipcMain.handle('packages:list', (event, gameId: unknown) => {
+    assertTrusted(event);
+    if (typeof gameId !== 'string' || !requireStore().getGame(gameId)) throw new Error('找不到这个游戏');
+    return requireStore().listPackages(gameId);
+  });
+
+  ipcMain.handle('packages:detect', async (event, gameId: unknown) => {
+    assertTrusted(event);
+    if (typeof gameId !== 'string') throw new Error('找不到这个游戏');
+    const game = requireStore().getGame(gameId);
+    if (!game) throw new Error('找不到这个游戏');
+    return detectGamePackages(game);
+  });
+
+  ipcMain.handle('packages:changes', (event, gameId: unknown) => {
+    assertTrusted(event);
+    if (typeof gameId !== 'string' || !requireStore().getGame(gameId)) throw new Error('找不到这个游戏');
+    return requireStore().listPackageChanges(gameId);
+  });
+
+  ipcMain.handle('packages:preview-change', (event, gameId: unknown, packageId: unknown, enabled: unknown): PackageChangePreview => {
+    assertTrusted(event);
+    if (typeof gameId !== 'string' || typeof packageId !== 'string' || typeof enabled !== 'boolean') throw new Error('无效的 Package 变更');
+    const game = requireStore().getGame(gameId);
+    const item = requireStore().getPackage(gameId, packageId);
+    if (!game || !item) throw new Error('找不到这个 Package');
+    if (item.enabled === enabled) throw new Error(enabled ? 'Package 已启用' : 'Package 已停用');
+    const sourcePath = item.enabled ? item.path : item.disabledPath;
+    const targetPath = enabled ? item.path : item.disabledPath;
+    const roots = game.launchProfiles.map((profile) => profile.workingDirectory);
+    if (!roots.some((root) => isPathInside(root, sourcePath) && isPathInside(root, targetPath))) throw new Error('Package 路径超出游戏目录，已拒绝操作');
+    const token = randomUUID();
+    const backupPath = path.join(app.getPath('userData'), 'package-backups', gameId, packageId, `${operationStamp()}-${enabled ? 'before-enable' : 'before-disable'}`);
+    const preview = { token, packageId, packageName: item.name, enabled, sourcePath, targetPath, backupPath };
+    pendingPackageChanges.set(token, { gameId, preview, createdAt: Date.now() });
+    return preview;
+  });
+
+  ipcMain.handle('packages:apply-change', async (event, token: unknown) => {
+    assertTrusted(event);
+    if (typeof token !== 'string') throw new Error('无效的 Package 操作');
+    const pending = requireFresh(pendingPackageChanges, token);
+    const item = requireStore().getPackage(pending.gameId, pending.preview.packageId);
+    if (!item || item.enabled === pending.preview.enabled) throw new Error('Package 状态已改变，请重新预览');
+    const expectedSource = item.enabled ? item.path : item.disabledPath;
+    const expectedTarget = pending.preview.enabled ? item.path : item.disabledPath;
+    if (expectedSource !== pending.preview.sourcePath || expectedTarget !== pending.preview.targetPath) throw new Error('Package 路径已改变，请重新检测');
+    const confirmation = await dialog.showMessageBox(mainWindow!, {
+      type: 'warning',
+      title: pending.preview.enabled ? '启用 Package' : '停用 Package',
+      message: `${pending.preview.enabled ? '启用' : '停用'}“${item.name}”？`,
+      detail: `来源：${pending.preview.sourcePath}\n目标：${pending.preview.targetPath}\n备份：${pending.preview.backupPath}\n\nGameShelf 会先复制并校验备份，再执行同目录重命名。`,
+      buttons: ['取消', '确认执行'], defaultId: 0, cancelId: 0, noLink: true
+    });
+    if (confirmation.response !== 1) throw new Error('操作已取消');
+    await createTreeSnapshot(pending.preview.sourcePath, pending.preview.backupPath);
+    await renameDirectorySafely(pending.preview.sourcePath, pending.preview.targetPath);
+    try {
+      const updated = requireStore().recordPackageState(pending.gameId, item.id, pending.preview.enabled, pending.preview.backupPath);
+      log('INFO', `Package ${item.id} 已${updated.enabled ? '启用' : '停用'}；备份 ${pending.preview.backupPath}`);
+      return updated;
+    } catch (error) {
+      try { await renameDirectorySafely(pending.preview.targetPath, pending.preview.sourcePath); }
+      catch (rollbackError) { throw new Error(`Package 记录失败且自动回滚失败。备份仍在 ${pending.preview.backupPath}。${errorText(rollbackError)}`); }
+      throw error;
+    }
+  });
+
+  ipcMain.handle('saves:pick-directory', async (event) => {
+    assertTrusted(event);
+    const selected = await dialog.showOpenDialog(mainWindow!, { title: '选择存档文件夹', properties: ['openDirectory'] });
+    return selected.canceled ? null : selected.filePaths[0] ?? null;
+  });
+
+  ipcMain.handle('saves:list', (event, gameId: unknown) => {
+    assertTrusted(event);
+    if (typeof gameId !== 'string' || !requireStore().getGame(gameId)) throw new Error('找不到这个游戏');
+    return requireStore().listSaveLocations(gameId);
+  });
+
+  ipcMain.handle('saves:add-location', async (event, gameId: unknown, name: unknown, savePath: unknown) => {
+    assertTrusted(event);
+    if (typeof gameId !== 'string' || !requireStore().getGame(gameId)) throw new Error('找不到这个游戏');
+    if (typeof name !== 'string' || !name.trim() || name.trim().length > 80 || typeof savePath !== 'string' || !path.isAbsolute(savePath)) throw new Error('存档位置设置无效');
+    const details = await lstat(savePath);
+    if (!details.isDirectory() || details.isSymbolicLink()) throw new Error('存档位置不是普通文件夹');
+    requireStore().createSaveLocation(gameId, name, path.resolve(savePath));
+    return requireStore().listSaveLocations(gameId);
+  });
+
+  ipcMain.handle('saves:create-branch', (event, locationId: unknown, name: unknown) => {
+    assertTrusted(event);
+    if (typeof locationId !== 'string' || typeof name !== 'string' || !name.trim() || name.trim().length > 80) throw new Error('存档分支名称无效');
+    const location = requireStore().getSaveLocation(locationId);
+    if (!location) throw new Error('找不到存档位置');
+    requireStore().createSaveBranch(locationId, name);
+    return requireStore().listSaveLocations(location.gameId);
+  });
+
+  ipcMain.handle('saves:create-snapshot', async (event, branchId: unknown, name: unknown) => {
+    assertTrusted(event);
+    if (typeof branchId !== 'string' || typeof name !== 'string' || !name.trim() || name.trim().length > 80) throw new Error('快照名称无效');
+    const location = requireStore().getSaveLocationByBranch(branchId);
+    if (!location) throw new Error('找不到存档分支');
+    const id = randomUUID();
+    const destination = path.join(app.getPath('userData'), 'save-snapshots', location.gameId, branchId, id);
+    const result = await createTreeSnapshot(location.path, destination);
+    requireStore().addSaveSnapshot(branchId, id, name, destination, 'manual', result.manifestHash);
+    log('INFO', `已创建存档快照 ${id}；${result.fileCount} 个文件`);
+    return requireStore().listSaveLocations(location.gameId);
+  });
+
+  ipcMain.handle('saves:preview-restore', async (event, snapshotId: unknown): Promise<SaveRestorePreview> => {
+    assertTrusted(event);
+    if (typeof snapshotId !== 'string') throw new Error('无效的存档快照');
+    const record = requireStore().getSaveSnapshot(snapshotId);
+    if (!record) throw new Error('找不到存档快照');
+    const snapshotRoot = path.join(app.getPath('userData'), 'save-snapshots');
+    if (!isPathInside(snapshotRoot, record.snapshot.path)) throw new Error('快照路径超出 GameShelf 数据目录');
+    const validation = await validateTreeSnapshot(record.snapshot.path);
+    if (validation.manifestHash !== record.snapshot.manifestHash) throw new Error('快照清单与数据库记录不一致');
+    const token = randomUUID();
+    const preRestoreSnapshotId = randomUUID();
+    const preRestoreSnapshotPath = path.join(snapshotRoot, record.location.gameId, record.snapshot.branchId, preRestoreSnapshotId);
+    const preview = { token, snapshotId, snapshotName: record.snapshot.name, sourcePath: record.snapshot.path, targetPath: record.location.path, preRestoreSnapshotPath };
+    pendingSaveRestores.set(token, { gameId: record.location.gameId, branchId: record.snapshot.branchId, preview, preRestoreSnapshotId, createdAt: Date.now() });
+    return preview;
+  });
+
+  ipcMain.handle('saves:apply-restore', async (event, token: unknown) => {
+    assertTrusted(event);
+    if (typeof token !== 'string') throw new Error('无效的恢复操作');
+    const pending = requireFresh(pendingSaveRestores, token);
+    const record = requireStore().getSaveSnapshot(pending.preview.snapshotId);
+    if (!record || record.snapshot.path !== pending.preview.sourcePath || record.location.path !== pending.preview.targetPath) throw new Error('存档位置或快照已改变，请重新预览');
+    const validation = await validateTreeSnapshot(record.snapshot.path);
+    if (validation.manifestHash !== record.snapshot.manifestHash) throw new Error('快照校验失败，当前存档未被修改');
+    const confirmation = await dialog.showMessageBox(mainWindow!, {
+      type: 'warning', title: '恢复存档快照', message: `恢复“${record.snapshot.name}”到当前存档位置？`,
+      detail: `已通过 SHA-256 校验。恢复前快照将保存到：\n${pending.preview.preRestoreSnapshotPath}\n\n当前存档目录会保留为同级 recovery 副本，不会被删除。`,
+      buttons: ['取消', '恢复'], defaultId: 0, cancelId: 0, noLink: true
+    });
+    if (confirmation.response !== 1) throw new Error('恢复已取消');
+    const before = await createTreeSnapshot(record.location.path, pending.preview.preRestoreSnapshotPath);
+    requireStore().addSaveSnapshot(pending.branchId, pending.preRestoreSnapshotId, `恢复前 · ${new Date().toLocaleString('zh-CN')}`, pending.preview.preRestoreSnapshotPath, 'before_restore', before.manifestHash);
+    const restored = await restoreTreeSnapshot(record.snapshot.path, record.location.path);
+    log('INFO', `已恢复存档快照 ${record.snapshot.id}；恢复前快照 ${pending.preRestoreSnapshotId}；原目录 ${restored.recoveryPath}`);
+    return requireStore().listSaveLocations(pending.gameId);
+  });
+
   ipcMain.handle('profile:get', (event) => {
     assertTrusted(event);
     return hydrateProfile();
@@ -543,7 +743,7 @@ function createWindow(): void {
     autoHideMenuBar: true,
     show: false,
     webPreferences: {
-      preload: path.join(__dirname, 'preload.js'),
+      preload: path.join(__dirname, 'preload.cjs'),
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true
