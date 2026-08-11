@@ -44,11 +44,19 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px s
 .nav-item:hover, .safe-toggle:hover { background: rgba(255,255,255,.06); color: white; }
 .nav-item.active { background: rgba(255,255,255,.14); color: white; }
 .nav-item.active .app-icon { color: #67aefc; }
+.nav-item .icon-book { color: #d49bc0; }
 .nav-item .icon-sparkles { color: #b9a9f7; }
 .nav-item .icon-sword { color: #e5b978; }
 .nav-item .icon-buildings { color: #78c8ad; }
 .nav-item .icon-bolt { color: #e8917c; }
 .nav-item .icon-gamepad { color: #78bce7; }
+.category-nav-item { position: relative; border-radius: 9px; }
+.category-nav-item .nav-item { padding-right: 31px; }
+.category-nav-item.dragging { opacity: .45; }
+.category-nav-item.drop-target { box-shadow: inset 0 0 0 1px rgba(103,174,252,.75); }
+.category-drag-handle { position: absolute; top: 6px; right: 4px; width: 25px; height: 25px; padding: 0; border: 0; border-radius: 6px; background: transparent; color: rgba(255,255,255,.28); font-size: 15px; line-height: 25px; cursor: grab; }
+.category-drag-handle:hover, .category-drag-handle:focus-visible { background: rgba(255,255,255,.08); color: rgba(255,255,255,.8); outline: 0; }
+.category-drag-handle:active { cursor: grabbing; }
 .collection-nav { padding-bottom: 6px; }
 .sidebar-empty { display: block; padding: 7px 9px; color: rgba(255,255,255,.32); font-size: 10px; }
 .sidebar-bottom { margin-top: auto; padding-top: 8px; border-top: 1px solid rgba(255,255,255,.07); }
@@ -583,6 +591,8 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px s
 [data-theme="light"] .nav-item:hover, [data-theme="light"] .safe-toggle:hover { background: rgba(0,0,0,.055); color: #1f2022; }
 [data-theme="light"] .nav-item.active { background: rgba(0,0,0,.12); color: #111214; }
 [data-theme="light"] .nav-item.active .app-icon { color: #111214; }
+[data-theme="light"] .category-drag-handle { color: rgba(0,0,0,.28); }
+[data-theme="light"] .category-drag-handle:hover, [data-theme="light"] .category-drag-handle:focus-visible { background: rgba(0,0,0,.07); color: rgba(0,0,0,.75); }
 [data-theme="light"] .sidebar-empty { color: rgba(0,0,0,.3); }
 [data-theme="light"] .sidebar-bottom { border-color: rgba(0,0,0,.07); }
 [data-theme="light"] .safe-toggle.active { color: #1e5e9e; }
@@ -748,6 +758,7 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px s
 .sidebar-collapsed .nav-section-content { margin-top: 0; }
 .sidebar-collapsed .nav-item, .sidebar-collapsed .safe-toggle { justify-content: center; gap: 0; padding: 0; font-size: 0; }
 .sidebar-collapsed .nav-item .app-icon, .sidebar-collapsed .safe-toggle .app-icon { width: 18px; height: 18px; }
+.sidebar-collapsed .category-drag-handle { display: none; }
 .sidebar-collapsed .collection-nav { padding: 0; }
 .sidebar-collapsed .safe-toggle .switch, .sidebar-collapsed .profile-button strong, .sidebar-collapsed .profile-button .app-icon { display: none; }
 .sidebar-collapsed .profile-button { justify-content: center; padding-inline: 0; }

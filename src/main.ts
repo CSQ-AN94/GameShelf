@@ -6,6 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { app, BrowserWindow, dialog, ipcMain, Menu, shell, type IpcMainInvokeEvent } from 'electron';
 import started from 'electron-squirrel-startup';
+import { parseCategoryOrder } from './category-order';
 import { appendLog, clearRunning, createStoreBackup, libraryPaths, logTail, markRunning, prepareDatabase, restoreStore, type StartupSafetyResult } from './data-safety';
 import { GameStore, inspectGameDatabase } from './game-store';
 import { analyzeExecutable } from './game-detection';
@@ -194,7 +195,8 @@ function readPreferences(): AppPreferences {
     titleDisplayMode: preferenceStore.getSetting('appearance.titleDisplayMode') === 'chinese' ? 'chinese' : 'original',
     libraryViewMode: preferenceStore.getSetting('appearance.libraryViewMode') === 'list' ? 'list' : 'grid',
     safeView: preferenceStore.getSetting('privacy.safeView') === 'true',
-    sidebarCollapsed: preferenceStore.getSetting('appearance.sidebarCollapsed') === 'true'
+    sidebarCollapsed: preferenceStore.getSetting('appearance.sidebarCollapsed') === 'true',
+    categoryOrder: parseCategoryOrder(preferenceStore.getSetting('appearance.categoryOrder'))
   };
 }
 
@@ -635,13 +637,15 @@ function registerIpc(): void {
 
   ipcMain.handle('preferences:save', (event, preferences: AppPreferences) => {
     assertTrusted(event);
-    if (!preferences || !['dark', 'light'].includes(preferences.theme) || !['original', 'chinese'].includes(preferences.titleDisplayMode) || !['grid', 'list'].includes(preferences.libraryViewMode) || typeof preferences.safeView !== 'boolean' || typeof preferences.sidebarCollapsed !== 'boolean') throw new Error('无效的应用设置');
+    const validCategoryOrder = Array.isArray(preferences?.categoryOrder) && preferences.categoryOrder.length <= 200 && preferences.categoryOrder.every((category) => typeof category === 'string' && Boolean(category.trim()) && category.length <= 80) && new Set(preferences.categoryOrder).size === preferences.categoryOrder.length;
+    if (!preferences || !['dark', 'light'].includes(preferences.theme) || !['original', 'chinese'].includes(preferences.titleDisplayMode) || !['grid', 'list'].includes(preferences.libraryViewMode) || typeof preferences.safeView !== 'boolean' || typeof preferences.sidebarCollapsed !== 'boolean' || !validCategoryOrder) throw new Error('无效的应用设置');
     const preferenceStore = requireStore();
     preferenceStore.setSetting('appearance.theme', preferences.theme);
     preferenceStore.setSetting('appearance.titleDisplayMode', preferences.titleDisplayMode);
     preferenceStore.setSetting('appearance.libraryViewMode', preferences.libraryViewMode);
     preferenceStore.setSetting('privacy.safeView', String(preferences.safeView));
     preferenceStore.setSetting('appearance.sidebarCollapsed', String(preferences.sidebarCollapsed));
+    preferenceStore.setSetting('appearance.categoryOrder', JSON.stringify(preferences.categoryOrder));
     return readPreferences();
   });
 

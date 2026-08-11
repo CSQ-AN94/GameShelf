@@ -178,6 +178,7 @@ export interface AppPreferences {
   libraryViewMode: LibraryViewMode;
   safeView: boolean;
   sidebarCollapsed: boolean;
+  categoryOrder: string[];
 }
 
 export interface LibraryScanCandidate {
