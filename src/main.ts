@@ -447,6 +447,18 @@ function registerIpc(): void {
     return requireStore().createCollection(name);
   });
 
+  ipcMain.handle('collections:rename', (event, collectionId: unknown, name: unknown) => {
+    assertTrusted(event);
+    if (typeof collectionId !== 'string' || typeof name !== 'string' || !name.trim()) throw new Error('合集名称不能为空');
+    if (name.trim().length > 80) throw new Error('合集名称过长');
+    return requireStore().renameCollection(collectionId, name);
+  });
+
+  ipcMain.handle('collections:delete', (event, collectionId: unknown) => {
+    assertTrusted(event);
+    if (typeof collectionId !== 'string' || !requireStore().deleteCollection(collectionId)) throw new Error('找不到这个合集');
+  });
+
   ipcMain.handle('collections:set-game', (event, gameId: unknown, collectionIds: unknown) => {
     assertTrusted(event);
     if (typeof gameId !== 'string' || !Array.isArray(collectionIds) || !collectionIds.every((id) => typeof id === 'string')) throw new Error('无效的合集设置');

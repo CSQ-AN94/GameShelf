@@ -72,6 +72,19 @@ describe('GameStore', () => {
     store.close();
   });
 
+  it('renames and deletes a collection without deleting its games', () => {
+    const store = new GameStore(':memory:');
+    const game = store.createGame({ title: 'Keep Me', type: 'other', contentRating: 'general', executablePath: 'C:\\Games\\Keep\\game.exe', workingDirectory: 'C:\\Games\\Keep' });
+    const collection = store.createCollection('Old Name');
+    store.setGameCollections(game.id, [collection.id]);
+
+    assert.equal(store.renameCollection(collection.id, 'New Name').name, 'New Name');
+    assert.equal(store.deleteCollection(collection.id), true);
+    assert.equal(store.listCollections().length, 0);
+    assert.equal(store.getGame(game.id)?.title, 'Keep Me');
+    store.close();
+  });
+
   it('removes only the selected library record and its related data', () => {
     const store = new GameStore(':memory:');
     const removed = store.createGame({

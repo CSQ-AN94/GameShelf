@@ -57,6 +57,11 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px s
 .category-drag-handle { position: absolute; top: 6px; right: 4px; width: 25px; height: 25px; padding: 0; border: 0; border-radius: 6px; background: transparent; color: rgba(255,255,255,.28); font-size: 15px; line-height: 25px; cursor: grab; }
 .category-drag-handle:hover, .category-drag-handle:focus-visible { background: rgba(255,255,255,.08); color: rgba(255,255,255,.8); outline: 0; }
 .category-drag-handle:active { cursor: grabbing; }
+.collection-nav-item { position: relative; border-radius: 9px; }
+.collection-nav-item .nav-item { padding-right: 31px; }
+.collection-edit-button { position: absolute; top: 6px; right: 4px; display: grid; place-items: center; width: 25px; height: 25px; padding: 0; border: 0; border-radius: 6px; background: transparent; color: rgba(255,255,255,.28); cursor: pointer; }
+.collection-edit-button:hover, .collection-edit-button:focus-visible { background: rgba(255,255,255,.08); color: rgba(255,255,255,.8); outline: 0; }
+.collection-edit-button .app-icon { width: 13px; }
 .collection-nav { padding-bottom: 6px; }
 .sidebar-empty { display: block; padding: 7px 9px; color: rgba(255,255,255,.32); font-size: 10px; }
 .sidebar-bottom { margin-top: auto; padding-top: 8px; border-top: 1px solid rgba(255,255,255,.07); }
@@ -593,6 +598,8 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px s
 [data-theme="light"] .nav-item.active .app-icon { color: #111214; }
 [data-theme="light"] .category-drag-handle { color: rgba(0,0,0,.28); }
 [data-theme="light"] .category-drag-handle:hover, [data-theme="light"] .category-drag-handle:focus-visible { background: rgba(0,0,0,.07); color: rgba(0,0,0,.75); }
+[data-theme="light"] .collection-edit-button { color: rgba(0,0,0,.28); }
+[data-theme="light"] .collection-edit-button:hover, [data-theme="light"] .collection-edit-button:focus-visible { background: rgba(0,0,0,.07); color: rgba(0,0,0,.75); }
 [data-theme="light"] .sidebar-empty { color: rgba(0,0,0,.3); }
 [data-theme="light"] .sidebar-bottom { border-color: rgba(0,0,0,.07); }
 [data-theme="light"] .safe-toggle.active { color: #1e5e9e; }
@@ -758,7 +765,7 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px s
 .sidebar-collapsed .nav-section-content { margin-top: 0; }
 .sidebar-collapsed .nav-item, .sidebar-collapsed .safe-toggle { justify-content: center; gap: 0; padding: 0; font-size: 0; }
 .sidebar-collapsed .nav-item .app-icon, .sidebar-collapsed .safe-toggle .app-icon { width: 18px; height: 18px; }
-.sidebar-collapsed .category-drag-handle { display: none; }
+.sidebar-collapsed .category-drag-handle, .sidebar-collapsed .collection-edit-button { display: none; }
 .sidebar-collapsed .collection-nav { padding: 0; }
 .sidebar-collapsed .safe-toggle .switch, .sidebar-collapsed .profile-button strong, .sidebar-collapsed .profile-button .app-icon { display: none; }
 .sidebar-collapsed .profile-button { justify-content: center; padding-inline: 0; }

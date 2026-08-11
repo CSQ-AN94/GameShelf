@@ -585,6 +585,18 @@ export class GameStore {
     return { id, name: name.trim(), gameIds: [], createdAt };
   }
 
+  renameCollection(collectionId: string, name: string): GameCollection {
+    const duplicate = this.database.prepare('SELECT id FROM collections WHERE name = ? AND id != ?').get(name.trim(), collectionId);
+    if (duplicate) throw new Error('合集名称已存在');
+    const result = this.database.prepare('UPDATE collections SET name = ? WHERE id = ?').run(name.trim(), collectionId);
+    if (!result.changes) throw new Error('找不到这个合集');
+    return this.listCollections().find((collection) => collection.id === collectionId)!;
+  }
+
+  deleteCollection(collectionId: string): boolean {
+    return this.database.prepare('DELETE FROM collections WHERE id = ?').run(collectionId).changes > 0;
+  }
+
   setGameCollections(gameId: string, collectionIds: string[]): void {
     this.database.exec('BEGIN IMMEDIATE');
     try {

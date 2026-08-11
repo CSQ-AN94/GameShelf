@@ -248,6 +248,8 @@ export interface GameShelfApi {
   openGameDirectory: (id: string) => Promise<string>;
   listCollections: () => Promise<GameCollection[]>;
   createCollection: (name: string) => Promise<GameCollection>;
+  renameCollection: (collectionId: string, name: string) => Promise<GameCollection>;
+  deleteCollection: (collectionId: string) => Promise<void>;
   setGameCollections: (gameId: string, collectionIds: string[]) => Promise<void>;
   setCollectionOrder: (collectionId: string, gameIds: string[]) => Promise<GameCollection>;
   listPackages: (gameId: string) => Promise<GamePackage[]>;
