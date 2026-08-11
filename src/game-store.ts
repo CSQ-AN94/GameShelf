@@ -2,6 +2,43 @@ import { randomUUID } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 import type { Game, GameCollection, GameSettingsInput, GameStatus, LaunchProfile, LaunchProfileInput, NewGameInput } from './shared';
 
+export const DATABASE_SCHEMA_VERSION = 1;
+
+export interface DatabaseInspection {
+  valid: boolean;
+  schemaVersion: number;
+  message: string;
+}
+
+function quickCheck(database: DatabaseSync): string[] {
+  return (database.prepare('PRAGMA quick_check').all() as { quick_check: string }[]).map((row) => row.quick_check);
+}
+
+export function inspectGameDatabase(filePath: string, recoverWal = false): DatabaseInspection {
+  let database: DatabaseSync | null = null;
+  try {
+    database = new DatabaseSync(filePath, { readOnly: !recoverWal });
+    const results = quickCheck(database);
+    if (results.length !== 1 || results[0] !== 'ok') {
+      return { valid: false, schemaVersion: -1, message: `数据库完整性校验失败：${results.join('；')}` };
+    }
+    const schemaVersion = (database.prepare('PRAGMA user_version').get() as { user_version: number }).user_version;
+    if (schemaVersion > DATABASE_SCHEMA_VERSION) {
+      return { valid: false, schemaVersion, message: `备份来自更高版本（数据库版本 ${schemaVersion}），请先更新 GameShelf` };
+    }
+    const tables = new Set((database.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all() as { name: string }[]).map((row) => row.name));
+    const gameColumns = new Set((database.prepare('PRAGMA table_info(games)').all() as { name: string }[]).map((row) => row.name));
+    if (!tables.has('games') || !['id', 'title', 'executable_path'].every((column) => gameColumns.has(column))) {
+      return { valid: false, schemaVersion, message: '所选文件不是可识别的 GameShelf 游戏库备份' };
+    }
+    return { valid: true, schemaVersion, message: 'ok' };
+  } catch (error) {
+    return { valid: false, schemaVersion: -1, message: error instanceof Error ? error.message : String(error) };
+  } finally {
+    database?.close();
+  }
+}
+
 type GameRow = {
   id: string;
   title: string;
@@ -86,8 +123,33 @@ export class GameStore {
 
   constructor(path: string) {
     this.database = new DatabaseSync(path);
-    this.database.exec('PRAGMA foreign_keys = ON');
-    this.database.exec('PRAGMA journal_mode = WAL');
+    try {
+      this.database.exec('PRAGMA foreign_keys = ON');
+      const schemaVersion = this.getSchemaVersion();
+      if (schemaVersion > DATABASE_SCHEMA_VERSION) {
+        throw new Error(`数据库版本 ${schemaVersion} 高于当前支持的 ${DATABASE_SCHEMA_VERSION}，请更新 GameShelf`);
+      }
+      this.database.exec('PRAGMA journal_mode = WAL');
+      this.database.exec('BEGIN IMMEDIATE');
+      try {
+        this.migrateSchema();
+        this.database.exec(`PRAGMA user_version = ${DATABASE_SCHEMA_VERSION}`);
+        this.database.exec('COMMIT');
+      } catch (error) {
+        this.database.exec('ROLLBACK');
+        throw error;
+      }
+      const integrity = quickCheck(this.database);
+      if (integrity.length !== 1 || integrity[0] !== 'ok') {
+        throw new Error(`数据库完整性校验失败：${integrity.join('；')}`);
+      }
+    } catch (error) {
+      this.database.close();
+      throw error;
+    }
+  }
+
+  private migrateSchema(): void {
     this.database.exec(`
       CREATE TABLE IF NOT EXISTS games (
         id TEXT PRIMARY KEY,
@@ -188,6 +250,27 @@ export class GameStore {
       FROM games
       WHERE NOT EXISTS (SELECT 1 FROM launch_profiles WHERE launch_profiles.game_id = games.id)
     `);
+  }
+
+  getSchemaVersion(): number {
+    return (this.database.prepare('PRAGMA user_version').get() as { user_version: number }).user_version;
+  }
+
+  getDiagnostics(): { schemaVersion: number; integrity: string; games: number; collections: number; launchProfiles: number; playSessions: number } {
+    const count = (table: string) => (this.database.prepare(`SELECT count(*) AS count FROM ${table}`).get() as { count: number }).count;
+    return {
+      schemaVersion: this.getSchemaVersion(),
+      integrity: quickCheck(this.database).join('; '),
+      games: count('games'),
+      collections: count('collections'),
+      launchProfiles: count('launch_profiles'),
+      playSessions: count('play_sessions')
+    };
+  }
+
+  backupTo(destination: string): void {
+    this.database.exec('PRAGMA wal_checkpoint(PASSIVE)');
+    this.database.prepare('VACUUM INTO ?').run(destination);
   }
 
   private listLaunchProfiles(gameId: string): LaunchProfile[] {
