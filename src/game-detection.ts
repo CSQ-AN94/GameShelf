@@ -4,9 +4,9 @@ import type { GameSetupAnalysis, GameType } from './shared';
 
 export type ScannedEntry = { relativePath: string; isDirectory: boolean };
 
-const ignoredExecutable = /(?:unins|uninstall|crashhandler|pythonw?|zsync|dxwebsetup|userconf|config|setup|patch|update|part\d|delfile|ファイル破損|セーブデータフォルダ|(?:^|\/)(?:lib|补丁|原版备份|备份|全cg存档)(?:\/|$))/i;
+export const ignoredExecutable = /(?:unins|uninstall|crashhandler|pythonw?|zsync|dxwebsetup|userconf|config|setup|patch|update|part\d|delfile|ファイル破損|セーブデータフォルダ|(?:^|\/)(?:lib|补丁|原版备份|备份|全cg存档)(?:\/|$))/i;
 
-async function scanDirectory(root: string): Promise<ScannedEntry[]> {
+export async function scanDirectory(root: string): Promise<ScannedEntry[]> {
   const entries: ScannedEntry[] = [];
   const queue = [{ directory: root, relativePath: '', depth: 0 }];
   while (queue.length > 0 && entries.length < 4000) {
@@ -57,7 +57,7 @@ export function classifyGameSetup(executablePath: string, entries: ScannedEntry[
 
   const modDirectories = directories.filter((entry) => /(?:^|\/)(?:bepinex(?:\/plugins)?|melonloader(?:\/mods)?|mods)(?:\/|$)/i.test(entry.normalized)).map((entry) => pathApi.join(root, entry.relativePath)).slice(0, 8);
   const saveDirectories = directories.filter((entry) => /(?:^|\/)(?:save|saves|savedata|[^/]+_savedata)(?:\/|$)/i.test(entry.normalized) && !/(?:备份|全cg|补丁)/i.test(entry.relativePath)).map((entry) => pathApi.join(root, entry.relativePath)).slice(0, 8);
-  const patchDirectories = directories.filter((entry) => /(?:patch|补丁|汉化|作弊|无码)/i.test(pathApi.basename(entry.relativePath))).map((entry) => pathApi.join(root, entry.relativePath)).slice(0, 8);
+  const patchDirectories = directories.filter((entry) => /(?:patch|补丁|汉化|作弊|无码|r18|adult|fix|修复|voice|语音)/i.test(pathApi.basename(entry.relativePath))).map((entry) => pathApi.join(root, entry.relativePath)).slice(0, 8);
 
   return { engine, suggestedType, suggestedCategory, alternativeExecutables, modDirectories, saveDirectories, patchDirectories };
 }

@@ -72,6 +72,19 @@ describe('GameStore', () => {
     store.close();
   });
 
+  it('renames and deletes a collection without deleting its games', () => {
+    const store = new GameStore(':memory:');
+    const game = store.createGame({ title: 'Keep Me', type: 'other', contentRating: 'general', executablePath: 'C:\\Games\\Keep\\game.exe', workingDirectory: 'C:\\Games\\Keep' });
+    const collection = store.createCollection('Old Name');
+    store.setGameCollections(game.id, [collection.id]);
+
+    assert.equal(store.renameCollection(collection.id, 'New Name').name, 'New Name');
+    assert.equal(store.deleteCollection(collection.id), true);
+    assert.equal(store.listCollections().length, 0);
+    assert.equal(store.getGame(game.id)?.title, 'Keep Me');
+    store.close();
+  });
+
   it('removes only the selected library record and its related data', () => {
     const store = new GameStore(':memory:');
     const removed = store.createGame({
@@ -92,6 +105,70 @@ describe('GameStore', () => {
     assert.equal(store.removeGame(removed.id), true);
     assert.equal(store.getGame(removed.id), null);
     assert.equal(store.getGame(kept.id)?.title, 'Keep Me');
+    store.close();
+  });
+
+  it('imports and organizes a reviewed batch atomically', () => {
+    const store = new GameStore(':memory:');
+    const collection = store.createCollection('系列作品');
+    const imported = store.importGames([{
+      id: 'batch-game',
+      title: 'Batch Game',
+      type: 'visual_novel',
+      category: 'Galgame',
+      contentRating: 'general',
+      executablePath: 'C:\\Games\\Batch\\game.exe',
+      workingDirectory: 'C:\\Games\\Batch',
+      coverPath: null,
+      launchProfiles: [
+        { name: '默认启动', executablePath: 'C:\\Games\\Batch\\game.exe', isDefault: true },
+        { name: '汉化版', executablePath: 'C:\\Games\\Batch\\game_chs.exe', isDefault: false }
+      ]
+    }]);
+
+    const organized = store.bulkEditGames({ gameIds: [imported[0]!.id], status: 'playing', category: '收藏', hideInSafeView: true, addCollectionIds: [collection.id] });
+    assert.equal(organized[0]?.launchProfiles.length, 2);
+    assert.equal(organized[0]?.status, 'playing');
+    assert.equal(organized[0]?.category, '收藏');
+    assert.equal(organized[0]?.hideInSafeView, true);
+    assert.deepEqual(store.listCollections()[0]?.gameIds, ['batch-game']);
+
+    assert.throws(() => store.importGames([{
+      id: 'duplicate',
+      title: 'Duplicate',
+      type: 'other',
+      category: '其他游戏',
+      contentRating: 'general',
+      executablePath: 'C:\\Games\\Batch\\GAME.EXE',
+      workingDirectory: 'C:\\Games\\Batch',
+      coverPath: null,
+      launchProfiles: [{ name: '默认启动', executablePath: 'C:\\Games\\Batch\\GAME.EXE', isDefault: true }]
+    }]), /启动路径已存在/);
+    assert.equal(store.listGames().length, 1);
+    store.close();
+  });
+
+  it('records reversible packages, save branches, snapshots, and series order', () => {
+    const store = new GameStore(':memory:');
+    const first = store.createGame({ title: 'First', type: 'other', contentRating: 'general', executablePath: 'C:\\Series\\First\\game.exe', workingDirectory: 'C:\\Series\\First' });
+    const second = store.createGame({ title: 'Second', type: 'other', contentRating: 'general', executablePath: 'C:\\Series\\Second\\game.exe', workingDirectory: 'C:\\Series\\Second' });
+    const collection = store.createCollection('Series');
+    store.setGameCollections(first.id, [collection.id]);
+    store.setGameCollections(second.id, [collection.id]);
+    assert.deepEqual(store.setCollectionOrder(collection.id, [second.id, first.id]).gameIds, [second.id, first.id]);
+
+    const detected = store.upsertDetectedPackages(first.id, [{ name: 'Mods', kind: 'mod', path: 'C:\\Series\\First\\Mods', disabledPath: 'C:\\Series\\First\\Mods.gameshelf-disabled', enabled: true }]);
+    const changed = store.recordPackageState(first.id, detected[0]!.id, false, 'C:\\GameShelf\\package-backups\\one');
+    assert.equal(changed.enabled, false);
+    assert.deepEqual(store.listPackageChanges(first.id).map((item) => [item.enabledBefore, item.enabledAfter]), [[true, false]]);
+
+    const location = store.createSaveLocation(first.id, '本地存档', 'C:\\Series\\First\\SaveData');
+    const branch = store.createSaveBranch(location.id, '主线');
+    store.addSaveSnapshot(branch.id, 'snapshot-one', '开始前', 'C:\\GameShelf\\save-snapshots\\one', 'manual', 'a'.repeat(64));
+    const saved = store.listSaveLocations(first.id)[0];
+    assert.equal(saved?.branches[0]?.name, '主线');
+    assert.equal(saved?.branches[0]?.snapshots[0]?.name, '开始前');
+    assert.equal(store.getSaveSnapshot('snapshot-one')?.location.path, 'C:\\Series\\First\\SaveData');
     store.close();
   });
 });

@@ -1,6 +1,6 @@
 # Local Game Library
 
-A local-first library for launching and organizing games of any genre or content rating, with optional visual-novel progress, package, save, and privacy features.
+A local-first library for launching and organizing games of any genre or content rating, with package, save, and privacy features.
 
 ## Language
 
@@ -9,7 +9,7 @@ A locally managed playable title. A Game may have any Game Type or Content Ratin
 _Avoid_: GalGame as the generic name for every managed title
 
 **Game Type**:
-The form of a Game, such as Visual Novel, RPG, Simulation, or Other. Type-specific features, including Routes, are only shown when relevant.
+The form of a Game, such as Visual Novel, RPG, Simulation, or Other.
 _Avoid_: treating R18 as a game type
 
 **Content Rating**:
@@ -39,10 +39,6 @@ _Avoid_: Account
 **Save Snapshot**:
 A point-in-time restorable archive of a Save Branch.
 _Avoid_: Cloud Save, Sync
-
-**Route**:
-Optional narrative progress for a Visual Novel, such as a character path or ending. Routes do not apply to every Game.
-_Avoid_: Level, Chapter
 
 **Play Session**:
 One measured interval from launching a Game until its tracked process exits.
