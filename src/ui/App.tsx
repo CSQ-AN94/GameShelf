@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { moveCategory, orderCategories } from '../category-order';
-import type { AppPreferences, BatchImportInput, ContentRating, Game, GameCollection, GamePackage, GameSetupAnalysis, GameStatus, GameType, LaunchProfile, LibraryScanCandidate, NewGameInput, PackageChange, PackageChangePreview, SaveLocation, SaveRestorePreview, ThemeMode, TitleDisplayMode, UserProfile } from '../shared';
+import { normalizeTags, type AppPreferences, type BatchImportInput, type ContentRating, type Game, type GameCollection, type GamePackage, type GameSetupAnalysis, type GameStatus, type GameType, type LaunchProfile, type LibraryScanCandidate, type NewGameInput, type PackageChange, type PackageChangePreview, type SaveLocation, type SaveRestorePreview, type ThemeMode, type TitleDisplayMode, type UserProfile } from '../shared';
 import { applySafeView } from '../safe-view';
 import { gameTypeLabels as typeLabels, ratingLabels, searchGames, statusLabels } from '../search';
 import { alternateTitle, displayTitle } from '../title-display';
 
-type LibraryFilter = 'home' | 'settings' | 'all' | 'recent' | 'wishlist' | GameStatus | `category:${string}` | `collection:${string}`;
-type SidebarSectionName = 'library' | 'categories' | 'collections';
-type IconName = 'home' | 'settings' | 'library' | 'clock' | 'play' | 'check' | 'search' | 'shield' | 'plus' | 'book' | 'more' | 'folder' | 'list' | 'sidebar' | 'chevron' | 'sparkles' | 'sword' | 'buildings' | 'bolt' | 'gamepad' | 'trash';
+type LibraryFilter = 'home' | 'settings' | 'all' | 'recent' | 'wishlist' | GameStatus | `category:${string}` | `collection:${string}` | `tag:${string}`;
+type SidebarSectionName = 'library' | 'categories' | 'tags' | 'collections';
+type IconName = 'home' | 'settings' | 'library' | 'clock' | 'play' | 'check' | 'search' | 'shield' | 'plus' | 'book' | 'more' | 'folder' | 'list' | 'sidebar' | 'chevron' | 'sparkles' | 'sword' | 'buildings' | 'bolt' | 'gamepad' | 'trash' | 'tag';
 
 const iconPaths: Record<IconName, string> = {
   home: 'M3 10.8 12 3l9 7.8M5.5 9.7V21h13V9.7M9.5 21v-7h5v7',
@@ -30,7 +30,8 @@ const iconPaths: Record<IconName, string> = {
   buildings: 'M4 20V8h7v12M13 20V4h7v16M7 11h1M7 14h1M16 8h1M16 11h1M16 14h1M3 20h18',
   bolt: 'm13 2-8 12h6l-1 8 9-13h-6V2Z',
   gamepad: 'M7 8h10a4 4 0 0 1 3.8 5.2l-1.1 3.4a2 2 0 0 1-3.2 1L14 15h-4l-2.5 2.6a2 2 0 0 1-3.2-1l-1.1-3.4A4 4 0 0 1 7 8Zm0 3v4M5 13h4M16.5 12h.01M18.5 14h.01',
-  trash: 'M4 7h16M9 3h6l1 4M7 7l1 14h8l1-14M10 11v6M14 11v6'
+  trash: 'M4 7h16M9 3h6l1 4M7 7l1 14h8l1-14M10 11v6M14 11v6',
+  tag: 'M20 13 13 20 4 11V4h7l9 9ZM8 8h.01'
 };
 
 const typeIcons: Record<GameType, IconName> = {
@@ -182,7 +183,7 @@ function HomeView({ games, titleMode, onOpen, onLaunch, onAdd, onShowAll }: {
           <h1 title={featuredTitle}>{featuredTitle}</h1>
           {featured.developer && <p className="hero-developer">{featured.developer}</p>}
           <p className="hero-description">{featured.description || `${typeLabels[featured.type]} · ${ratingLabels[featured.contentRating]}`}</p>
-          <div className="hero-tags"><span>{featured.category}</span><span>{ratingLabels[featured.contentRating]}</span></div>
+          <div className="hero-tags"><span>{featured.category}</span><span>{ratingLabels[featured.contentRating]}</span>{featured.tags.slice(0, 3).map((tag) => <span key={tag}>{tag}</span>)}</div>
           <div className="hero-actions">
             <button className="hero-play" onClick={() => onLaunch(featured)}><Icon name="play" fill />{featured.lastPlayedAt ? '继续游玩' : '开始游玩'}</button>
             <button className="hero-profile" title={featured.executablePath}><Icon name="book" />默认启动 · {executableName(featured)}</button>
@@ -289,7 +290,7 @@ function GameDetail({ game, titleMode, collections, onBack, onLaunch, onStatusCh
       <div className="detail-content">
         <div className="detail-cover">{game.coverDataUrl ? <img src={game.coverDataUrl} alt={`${title} 封面`} /> : <div>{title.slice(0, 1)}</div>}</div>
         <div className="detail-copy">
-          <div className="detail-kicker"><button className="category-chip" onClick={onEditCategory}>{game.category}</button><span>{typeLabels[game.type]}</span><span>{ratingLabels[game.contentRating]}</span><span>{statusLabels[game.status]}</span></div>
+          <div className="detail-kicker"><button className="category-chip" onClick={onEditCategory}>{game.category}</button><span>{typeLabels[game.type]}</span><span>{ratingLabels[game.contentRating]}</span><span>{statusLabels[game.status]}</span>{game.tags.map((tag) => <span key={tag}>{tag}</span>)}</div>
           <h1>{title}</h1>
           {alternate && <p className="detail-alternate-title">{alternate}</p>}
           <p className="detail-developer">{game.developer || '未填写会社或开发者'}</p>
@@ -471,7 +472,7 @@ function BulkEditDialog({ games, initialIds, collections, onClose, onChanged, on
     const cover = await window.gameshelf.pickCover();
     if (!cover) return;
     try {
-      const updated = await window.gameshelf.updateGameSettings(game.id, { title: game.title, chineseTitle: game.chineseTitle, wishlist: game.wishlist, hideInSafeView: game.hideInSafeView, coverSourcePath: cover.path });
+      const updated = await window.gameshelf.updateGameSettings(game.id, { title: game.title, chineseTitle: game.chineseTitle, wishlist: game.wishlist, hideInSafeView: game.hideInSafeView, tags: game.tags, coverSourcePath: cover.path });
       setItems((current) => current.map((item) => item.id === updated.id ? updated : item));
       onChanged(updated);
     } catch (reason) { setError(errorMessage(reason)); }
@@ -655,6 +656,8 @@ function GameSettingsDialog({ game, titleMode, onClose, onChanged, onRemoved }: 
   const [chineseTitle, setChineseTitle] = useState(game.chineseTitle);
   const [wishlist, setWishlist] = useState(game.wishlist);
   const [hideInSafeView, setHideInSafeView] = useState(game.hideInSafeView);
+  const [tags, setTags] = useState(game.tags);
+  const [tagInput, setTagInput] = useState('');
   const [coverSourcePath, setCoverSourcePath] = useState<string | null>(null);
   const [coverPreview, setCoverPreview] = useState(game.coverDataUrl ?? null);
   const [backgroundSourcePath, setBackgroundSourcePath] = useState<string | null>(null);
@@ -689,6 +692,23 @@ function GameSettingsDialog({ game, titleMode, onClose, onChanged, onRemoved }: 
     setSaved(false);
   }
 
+  function addTag() {
+    const normalized = normalizeTags([tagInput])[0];
+    if (!normalized) return;
+    if (normalized.length > 40) return setError('单个标签最多 40 个字符');
+    const next = normalizeTags([...tags, normalized]);
+    if (next.length > 30) return setError('每个游戏最多添加 30 个标签');
+    setError('');
+    setTags(next);
+    setTagInput('');
+    setSaved(false);
+  }
+
+  function removeTag(tag: string) {
+    setTags((current) => current.filter((item) => item !== tag));
+    setSaved(false);
+  }
+
   async function chooseExecutable(id: string) {
     const selected = await window.gameshelf.pickExecutable();
     if (selected) patchProfile(id, { executablePath: selected, workingDirectory: selected.replace(/[\\/][^\\/]+$/, '') });
@@ -717,7 +737,7 @@ function GameSettingsDialog({ game, titleMode, onClose, onChanged, onRemoved }: 
     setError('');
     setSaving(true);
     try {
-      onChanged(await window.gameshelf.updateGameSettings(game.id, { title, chineseTitle, wishlist, hideInSafeView, coverSourcePath, backgroundSourcePath }));
+      onChanged(await window.gameshelf.updateGameSettings(game.id, { title, chineseTitle, wishlist, hideInSafeView, tags, coverSourcePath, backgroundSourcePath }));
       setCoverSourcePath(null);
       setBackgroundSourcePath(null);
       setSaved(true);
@@ -760,10 +780,10 @@ function GameSettingsDialog({ game, titleMode, onClose, onChanged, onRemoved }: 
   return (
     <div className="modal-backdrop"><section className="modal game-settings-modal" role="dialog" aria-modal="true" aria-labelledby="game-settings-title">
       <header className="game-settings-visual">
-        <button className={backgroundPreview ? 'settings-background' : 'settings-background empty'} type="button" onClick={chooseBackground} aria-label="更换横向背景图">
+        <div className={backgroundPreview ? 'settings-background' : 'settings-background empty'}>
           {backgroundPreview ? <img src={backgroundPreview} alt="横向背景预览" /> : <span className="artwork-placeholder">横向背景</span>}
-          <span className="artwork-action"><Icon name="plus" /><span><strong>更换横向背景</strong><small>用于主页与游戏详情页</small></span></span>
-        </button>
+          <button className="artwork-action" type="button" onClick={() => void chooseBackground()} aria-label="更换横向背景图"><Icon name="plus" /><span><strong>更换横向背景</strong><small>用于主页与游戏详情页</small></span></button>
+        </div>
         <div className="game-settings-visual-shade" />
         <button className="settings-cover" type="button" onClick={chooseCover} aria-label="更换竖版封面">
           {coverPreview ? <img src={coverPreview} alt="竖版封面预览" /> : <span className="artwork-placeholder">竖版封面</span>}
@@ -780,6 +800,7 @@ function GameSettingsDialog({ game, titleMode, onClose, onChanged, onRemoved }: 
             <label className="setting-toggle-row"><span><strong>加入欲玩清单</strong><small>在侧栏的欲玩清单中显示</small></span><input type="checkbox" checked={wishlist} onChange={(event) => { setWishlist(event.target.checked); setSaved(false); }} /><i /></label>
             <label className="setting-toggle-row"><span><strong>安全视图中隐藏</strong><small>开启安全视图时隐藏标题、图片和记录</small></span><input type="checkbox" checked={hideInSafeView} onChange={(event) => { setHideInSafeView(event.target.checked); setSaved(false); }} /><i /></label>
           </div></section>
+          <section className="settings-surface tag-settings"><header><span>标签</span><p>用于整理、筛选和搜索；不会改变内容分级或安全视图。</p></header><div className="tag-editor"><div className="tag-input-row"><input value={tagInput} maxLength={40} onChange={(event) => setTagInput(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); addTag(); } }} placeholder="输入标签，例如 成人向" aria-label="新标签" /><button type="button" className="settings-action" disabled={!tagInput.trim() || tags.length >= 30} onClick={addTag}>添加</button></div>{tags.length > 0 ? <div className="tag-list">{tags.map((tag) => <button type="button" key={tag} onClick={() => removeTag(tag)} aria-label={`删除标签 ${tag}`}>{tag}<span aria-hidden="true">×</span></button>)}</div> : <p className="tag-empty">还没有标签</p>}</div></section>
           <section className="game-location"><Icon name="folder" /><div><strong>游戏所在文件夹</strong><p title={game.workingDirectory}>{game.workingDirectory}</p></div><button type="button" className="settings-action" onClick={() => void openGameDirectory()}>打开文件夹</button></section>
           <section className="settings-danger"><Icon name="trash" /><div><strong>移出游戏库</strong><p>只移除 GameShelf 中的资料，不会删除游戏本体或存档。</p></div><button type="button" className="danger-button" onClick={() => setConfirmingRemoval(true)}>移出游戏库</button></section>
         </form> : pane === 'launch' ? <section className="launch-settings"><header><div><h3>启动项</h3><p>为原版、汉化版或补丁版分别选择 exe；默认项用于“开始游玩”。</p></div><button className="settings-action" onClick={addProfile}><Icon name="plus" />添加启动项</button></header>
@@ -801,8 +822,8 @@ function GameSettingsDialog({ game, titleMode, onClose, onChanged, onRemoved }: 
 function SearchView({ query, results, titleMode, viewMode, safeView, onQueryChange, onClose, onOpen, onViewModeChange }: { query: string; results: Game[]; titleMode: TitleDisplayMode; viewMode: AppPreferences['libraryViewMode']; safeView: boolean; onQueryChange: (value: string) => void; onClose: () => void; onOpen: (game: Game) => void; onViewModeChange: (mode: AppPreferences['libraryViewMode']) => void }) {
   const active = Boolean(query.trim());
   return <div className="search-view">
-    <header className="search-header"><button className="back-button" onClick={onClose}>‹ 返回</button><span className="eyebrow">游戏库</span><h1>搜索</h1><p>按标题、会社、分类、状态、分级、合集或启动项查找。</p></header>
-    <label className="search-page-input"><Icon name="search" /><input autoFocus value={query} onChange={(event) => onQueryChange(event.target.value)} placeholder="搜索整个游戏库" aria-label="搜索全部游戏" />{active && <button type="button" onClick={() => onQueryChange('')}>清除</button>}</label>
+    <header className="search-header"><button className="back-button" onClick={onClose}>‹ 返回</button><span className="eyebrow">游戏库</span><h1>搜索</h1><p>按标题、标签、会社、分类、状态、分级、合集或启动项查找。</p></header>
+    <label className="search-page-input"><Icon name="search" /><input autoFocus value={query} onChange={(event) => onQueryChange(event.target.value)} placeholder="搜索标题、标签或其他资料" aria-label="搜索全部游戏" />{active && <button type="button" onClick={() => onQueryChange('')}>清除</button>}</label>
     {!active ? <section className="search-empty"><h2>快捷筛选</h2><div className="search-suggestions">{['游玩中', '未开始', '已玩完', '欲玩清单', 'R18'].map((suggestion) => <button key={suggestion} onClick={() => onQueryChange(suggestion)}>{suggestion}</button>)}</div><p>也可以组合输入，例如“Fate R18”或“白色相簿系列”。按 Esc 返回刚才的位置。</p></section> : <><div className="search-summary"><span><strong>{results.length}</strong> 个结果</span>{safeView && <span className="safe-chip">安全视图已开启</span>}<span className="view-switch"><button className={viewMode === 'grid' ? 'active' : ''} onClick={() => onViewModeChange('grid')}>封面墙</button><button className={viewMode === 'list' ? 'active' : ''} onClick={() => onViewModeChange('list')}>信息列表</button></span></div><section className="search-results">{viewMode === 'grid' ? <div className="poster-grid">{results.map((game) => <Poster key={game.id} game={game} titleMode={titleMode} onOpen={() => onOpen(game)} />)}</div> : <LibraryList games={results} titleMode={titleMode} onOpen={onOpen} />}{results.length === 0 && <div className="no-results">没有匹配结果，试试更短的关键词或游戏状态</div>}</section></>}
   </div>;
 }
@@ -813,6 +834,7 @@ function filterTitle(filter: LibraryFilter, collections: GameCollection[]): stri
   if (filter === 'home') return '游戏首页';
   if (filter === 'settings') return '设置';
   if (filter.startsWith('category:')) return filter.slice(9);
+  if (filter.startsWith('tag:')) return `标签：${filter.slice(4)}`;
   if (filter.startsWith('collection:')) return collections.find((collection) => collection.id === filter.slice(11))?.name ?? '我的合集';
   if (filter === 'wishlist') return '欲玩清单';
   return statusLabels[filter as GameStatus];
@@ -839,7 +861,7 @@ export function App() {
   const [managingCollectionsFor, setManagingCollectionsFor] = useState<string | null>(null);
   const [editingSettingsFor, setEditingSettingsFor] = useState<string | null>(null);
   const [message, setMessage] = useState('');
-  const [collapsedSections, setCollapsedSections] = useState<Record<SidebarSectionName, boolean>>({ library: false, categories: false, collections: false });
+  const [collapsedSections, setCollapsedSections] = useState<Record<SidebarSectionName, boolean>>({ library: false, categories: false, tags: false, collections: false });
   const [draggedCategory, setDraggedCategory] = useState<string | null>(null);
   const [categoryDropTarget, setCategoryDropTarget] = useState<string | null>(null);
 
@@ -886,6 +908,10 @@ export function App() {
     if (activeCollection) return activeCollection.gameIds.map((id) => safeGames.find((game) => game.id === id)).filter((game): game is Game => Boolean(game));
     return safeGames.filter((game) => {
       if (filter.startsWith('category:')) return game.category === filter.slice(9);
+      if (filter.startsWith('tag:')) {
+        const selectedTag = filter.slice(4).normalize('NFKC').toLocaleLowerCase();
+        return game.tags.some((tag) => tag.normalize('NFKC').toLocaleLowerCase() === selectedTag);
+      }
       if (filter === 'recent') return Boolean(game.lastPlayedAt);
       if (filter === 'wishlist') return game.wishlist;
       if (['unplayed', 'playing', 'completed', 'paused'].includes(filter)) return game.status === filter;
@@ -899,6 +925,7 @@ export function App() {
   const membershipGame = safeGames.find((game) => game.id === managingCollectionsFor) ?? null;
   const settingsGame = safeGames.find((game) => game.id === editingSettingsFor) ?? null;
   const categories = useMemo(() => orderCategories([...new Set(safeGames.map((game) => game.category).filter(Boolean))], preferences.categoryOrder), [preferences.categoryOrder, safeGames]);
+  const tags = useMemo(() => normalizeTags(safeGames.flatMap((game) => game.tags)).sort((a, b) => a.localeCompare(b, 'zh-CN')), [safeGames]);
   const categoryIcons = useMemo(() => new Map(categories.map((category) => {
     const types = [...new Set(safeGames.filter((game) => game.category === category).map((game) => game.type))];
     return [category, category === 'ADV' ? 'book' : types.length === 1 ? typeIcons[types[0]!] : 'book'] as const;
@@ -919,7 +946,7 @@ export function App() {
 
   async function toggleWishlist(game: Game) {
     try {
-      const updated = await window.gameshelf.updateGameSettings(game.id, { title: game.title, chineseTitle: game.chineseTitle, wishlist: !game.wishlist, hideInSafeView: game.hideInSafeView });
+      const updated = await window.gameshelf.updateGameSettings(game.id, { title: game.title, chineseTitle: game.chineseTitle, wishlist: !game.wishlist, hideInSafeView: game.hideInSafeView, tags: game.tags });
       replaceGame(updated);
       const title = displayTitle(game, preferences.titleDisplayMode);
       setMessage(updated.wishlist ? `已将 ${title} 加入欲玩清单` : `已将 ${title} 移出欲玩清单`);
@@ -1099,6 +1126,7 @@ export function App() {
           {navItem('home', 'home', '主页')}
           <section className="nav-section"><button className={collapsedSections.library ? 'nav-section-heading collapsed' : 'nav-section-heading'} onClick={() => toggleSidebarSection('library')} aria-expanded={!collapsedSections.library}><strong>游戏库</strong><Icon name="chevron" /></button><div className="nav-section-content" hidden={collapsedSections.library}>{navItem('all', 'library', '全部游戏')}{navItem('completed', 'check', '已玩完')}{navItem('wishlist', 'clock', '欲玩清单')}</div></section>
           {categories.length > 0 && <section className="nav-section"><button className={collapsedSections.categories ? 'nav-section-heading collapsed' : 'nav-section-heading'} onClick={() => toggleSidebarSection('categories')} aria-expanded={!collapsedSections.categories}><strong>分类</strong><Icon name="chevron" /></button><div className="nav-section-content" hidden={collapsedSections.categories}>{categories.map((category, index) => <div key={category} className={`category-nav-item${draggedCategory === category ? ' dragging' : ''}${categoryDropTarget === category ? ' drop-target' : ''}`} onDragOver={(event) => { event.preventDefault(); setCategoryDropTarget(category); }} onDrop={(event) => { event.preventDefault(); const source = event.dataTransfer.getData('text/plain') || draggedCategory; if (source) saveCategoryOrder(source, category); setDraggedCategory(null); setCategoryDropTarget(null); }}>{navItem(`category:${category}`, categoryIcons.get(category) ?? 'book', category)}<button className="category-drag-handle" draggable title="拖动排序" aria-label={`调整 ${category} 的顺序`} onClick={(event) => { event.stopPropagation(); event.currentTarget.focus(); }} onDragStart={(event) => { event.dataTransfer.effectAllowed = 'move'; event.dataTransfer.setData('text/plain', category); setDraggedCategory(category); }} onDragEnd={() => { setDraggedCategory(null); setCategoryDropTarget(null); }} onKeyDown={(event) => { if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') return; event.preventDefault(); const target = categories[index + (event.key === 'ArrowUp' ? -1 : 1)]; if (target) saveCategoryOrder(category, target); }}>⠿</button></div>)}</div></section>}
+          {tags.length > 0 && <section className="nav-section"><button className={collapsedSections.tags ? 'nav-section-heading collapsed' : 'nav-section-heading'} onClick={() => toggleSidebarSection('tags')} aria-expanded={!collapsedSections.tags}><strong>标签</strong><Icon name="chevron" /></button><div className="nav-section-content" hidden={collapsedSections.tags}>{tags.map((tag) => navItem(`tag:${tag}`, 'tag', tag))}</div></section>}
           <section className="nav-section"><div className="nav-section-heading-row"><button className={collapsedSections.collections ? 'nav-section-heading collapsed' : 'nav-section-heading'} onClick={() => toggleSidebarSection('collections')} aria-expanded={!collapsedSections.collections}><strong>我的合集</strong><Icon name="chevron" /></button><button className="section-add" onClick={() => setCreatingCollection(true)} aria-label="新建合集"><Icon name="plus" /></button></div><div className="nav-section-content collection-nav" hidden={collapsedSections.collections}>{visibleCollections.map((collection) => <div key={collection.id} className="collection-nav-item">{navItem(`collection:${collection.id}`, 'list', collection.name)}<button className="collection-edit-button" title="编辑合集" aria-label={`编辑 ${collection.name}`} onClick={(event) => { event.stopPropagation(); preferences.safeView ? setMessage('关闭安全视图后才能编辑合集') : setEditingCollection(collection); }}><Icon name="more" /></button></div>)}{visibleCollections.length === 0 && <span className="sidebar-empty">还没有可显示的合集</span>}</div></section>
         </nav>
         <div className="sidebar-bottom">

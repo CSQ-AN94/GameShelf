@@ -19,7 +19,7 @@ export function searchGames(games: Game[], collections: GameCollection[], query:
     const text = normalizeSearchText([
       ...titles, game.developer, game.category, game.type, gameTypeLabels[game.type], game.contentRating, ratingLabels[game.contentRating], game.status, statusLabels[game.status], statusSearchAliases[game.status],
       game.wishlist ? '欲玩 欲玩清单 wishlist' : '', !game.coverDataUrl ? '缺失封面 无封面' : '',
-      ...game.languages, game.description, ...collectionNames, ...game.launchProfiles.flatMap((profile) => [profile.name, profile.executablePath, profile.launchArguments])
+      ...game.tags, ...game.languages, game.description, ...collectionNames, ...game.launchProfiles.flatMap((profile) => [profile.name, profile.executablePath, profile.launchArguments])
     ].join(' '));
     if (!tokens.every((token) => text.includes(token))) return null;
     const score = titles.some((title) => title === normalizedQuery) ? 3 : titles.some((title) => title.startsWith(normalizedQuery)) ? 2 : titles.some((title) => title.includes(normalizedQuery)) ? 1 : 0;

@@ -1,18 +1,23 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { searchGames } from '../src/search.ts';
-import type { Game, GameCollection } from '../src/shared.ts';
+import { normalizeTags, type Game, type GameCollection } from '../src/shared.ts';
 
 const game = (values: Partial<Game> & Pick<Game, 'id' | 'title'>): Game => ({
-  chineseTitle: '', developer: '', category: '其他游戏', type: 'other', contentRating: 'general', status: 'unplayed', languages: [], description: '', launchProfiles: [],
+  chineseTitle: '', developer: '', category: '其他游戏', type: 'other', contentRating: 'general', status: 'unplayed', tags: [], languages: [], description: '', launchProfiles: [],
   ...values
 } as Game);
 
 describe('game search', () => {
+  it('normalizes and deduplicates user tags before storage', () => {
+    assert.deepEqual(normalizeTags([' 成人向 ', '成人向', 'Ｆａｔｅ']), ['成人向', 'Fate']);
+    assert.equal(normalizeTags(['ﬃ'.repeat(40)])[0]?.length, 120);
+  });
+
   it('matches multiple title tokens and user-visible metadata', () => {
     const games = [
       game({ id: 'fate', title: 'Fate/stay night', chineseTitle: '命运之夜', developer: 'TYPE-MOON', category: 'Galgame', type: 'visual_novel', contentRating: 'r18', status: 'playing', launchProfiles: [{ id: 'localized', name: '汉化版', executablePath: 'G:\\Fate\\Fate.exe', workingDirectory: 'G:\\Fate', launchArguments: '', isDefault: true }] }),
-      game({ id: 'white-album', title: 'WHITE ALBUM2', category: 'Galgame', type: 'visual_novel', status: 'completed', wishlist: true })
+      game({ id: 'white-album', title: 'WHITE ALBUM2', category: 'Galgame', type: 'visual_novel', status: 'completed', wishlist: true, tags: ['成人向', '冬日'] })
     ];
     const collections = [{ id: 'white-series', name: '白色相簿系列', gameIds: ['white-album'], createdAt: '' }] as GameCollection[];
 
@@ -22,6 +27,7 @@ describe('game search', () => {
     assert.deepEqual(searchGames(games, collections, 'R18 type moon').map((item) => item.id), ['fate']);
     assert.deepEqual(searchGames(games, collections, '白色相簿系列').map((item) => item.id), ['white-album']);
     assert.deepEqual(searchGames(games, collections, '汉化版').map((item) => item.id), ['fate']);
+    assert.deepEqual(searchGames(games, collections, '成人向 冬日').map((item) => item.id), ['white-album']);
   });
 
   it('does not turn an empty query into every game', () => {

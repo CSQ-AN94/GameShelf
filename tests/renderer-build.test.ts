@@ -17,4 +17,10 @@ describe('renderer packaging', () => {
     assert.match(mainConfig, /entryFileNames:\s*['"]main\.cjs['"]/);
     assert.match(preloadConfig, /entryFileNames:\s*['"]preload\.cjs['"]/);
   });
+
+  it('opens the background picker only from its explicit action', () => {
+    const app = readFileSync(new URL('../src/ui/App.tsx', import.meta.url), 'utf8');
+    assert.doesNotMatch(app, /<button className=\{backgroundPreview \? 'settings-background'[\s\S]*?onClick=\{chooseBackground\}/);
+    assert.match(app, /<button className="artwork-action" type="button" onClick=\{\(\) => void chooseBackground\(\)\}/);
+  });
 });

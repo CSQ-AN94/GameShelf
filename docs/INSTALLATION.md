@@ -1,23 +1,23 @@
 # 安装、升级与便携使用
 
-GameShelf 1.0.0 提供 Windows x64 安装版和便携 ZIP。两个包功能相同，数据位置不同。
+GameShelf 1.1.0 提供 Windows x64 安装版和便携 ZIP。两个包功能相同，数据位置不同。
 
 ## 下载与校验
 
 从 [GitHub Releases](https://github.com/CSQ-AN94/GameShelf/releases/latest) 下载：
 
-- `GameShelf-1.0.0-windows-x64-setup.exe`：安装版。
-- `GameShelf-1.0.0-windows-x64-portable.zip`：便携版。
+- `GameShelf-1.1.0-windows-x64-setup.exe`：安装版。
+- `GameShelf-1.1.0-windows-x64-portable.zip`：便携版。
 - `SHA256SUMS.txt`：两项产物的 SHA-256。
 
 PowerShell 校验示例：
 
 ```powershell
-Get-FileHash .\GameShelf-1.0.0-windows-x64-setup.exe -Algorithm SHA256
-Get-FileHash .\GameShelf-1.0.0-windows-x64-portable.zip -Algorithm SHA256
+Get-FileHash .\GameShelf-1.1.0-windows-x64-setup.exe -Algorithm SHA256
+Get-FileHash .\GameShelf-1.1.0-windows-x64-portable.zip -Algorithm SHA256
 ```
 
-结果应与 `SHA256SUMS.txt` 完全一致。当前 1.0.0 产物未做代码签名，Windows SmartScreen 可能显示未知发布者；只从本仓库 Release 下载并先核对 SHA-256。
+结果应与 `SHA256SUMS.txt` 完全一致。当前 1.1.0 产物未做代码签名，Windows SmartScreen 可能显示未知发布者；只从本仓库 Release 下载并先核对 SHA-256。
 
 ## 安装版
 
@@ -41,7 +41,7 @@ Get-FileHash .\GameShelf-1.0.0-windows-x64-portable.zip -Algorithm SHA256
 3. 把新 ZIP 解压到原目录并覆盖应用文件，不要删除或覆盖现有 `data`。
 4. 确认 `gameshelf-portable` 仍与 `GameShelf.exe` 同级，再启动并核对数据。
 
-1.0.0 的便携 ZIP 兼容旧预览版放在程序旁的 `data`；不需要移动真实游戏或存档目录。删除 `gameshelf-portable` 会让应用改用安装版数据位置，因此不要把它当作无用文件清理。
+1.1.0 的便携 ZIP 兼容 1.0.0 和旧预览版放在程序旁的 `data`；不需要移动真实游戏或存档目录。首次启动会为标签字段迁移数据库，并在 `data\backups` 自动保存迁移前备份。迁移后的数据库不能由 1.0.0 打开；如需降级，请退出应用后恢复对应的 `gameshelf-before-migration-v2-*.sqlite`。删除 `gameshelf-portable` 会让应用改用安装版数据位置，因此不要把它当作无用文件清理。
 
 ## 安装版与便携版互换
 

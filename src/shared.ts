@@ -2,6 +2,16 @@ export type GameType = 'visual_novel' | 'rpg' | 'simulation' | 'action' | 'other
 export type ContentRating = 'general' | 'mature' | 'r18';
 export type GameStatus = 'unplayed' | 'playing' | 'completed' | 'paused';
 
+export function normalizeTags(values: string[]): string[] {
+  const seen = new Set<string>();
+  return values.map((value) => value.normalize('NFKC').trim().replace(/\s+/g, ' ')).filter((value) => {
+    const key = value.toLocaleLowerCase();
+    if (!value || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 export interface Game {
   id: string;
   title: string;
@@ -21,6 +31,7 @@ export interface Game {
   languages: string[];
   score: number | null;
   description: string;
+  tags: string[];
   status: GameStatus;
   wishlist: boolean;
   hideInSafeView: boolean;
@@ -71,6 +82,7 @@ export interface GameSettingsInput {
   chineseTitle: string;
   wishlist: boolean;
   hideInSafeView: boolean;
+  tags: string[];
   coverSourcePath?: string | null;
   backgroundSourcePath?: string | null;
 }
