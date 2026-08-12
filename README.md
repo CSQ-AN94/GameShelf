@@ -16,7 +16,7 @@
 ---
 
 <div align="center">
-  <img src="docs/preview.png" width="960" alt="GameShelf 游戏设置界面" />
+  <img src="docs/preview.png" width="960" alt="GameShelf 1.0 Mod 与存档界面" />
 </div>
 
 ---
