@@ -14,7 +14,7 @@ import { analyzeExecutable } from './game-detection';
 import { createTreeSnapshot, isPathInside, renameDirectorySafely, restoreTreeSnapshot, validateTreeSnapshot } from './file-safety';
 import { detachedGameProcessOptions, parseLaunchArguments } from './launch';
 import { scanLibraryRoots } from './library-scan';
-import type { AppPreferences, BatchImportInput, BulkEditGamesInput, Game, GamePackage, GameSettingsInput, GameStatus, LaunchProfileInput, NewGameInput, PackageChangePreview, PackageKind, PickedImage, ProfileInput, SaveRestorePreview, UserProfile } from './shared';
+import { normalizeTags, type AppPreferences, type BatchImportInput, type BulkEditGamesInput, type Game, type GamePackage, type GameSettingsInput, type GameStatus, type LaunchProfileInput, type NewGameInput, type PackageChangePreview, type PackageKind, type PickedImage, type ProfileInput, type SaveRestorePreview, type UserProfile } from './shared';
 
 declare const MAIN_WINDOW_VITE_DEV_SERVER_URL: string | undefined;
 declare const MAIN_WINDOW_VITE_NAME: string;
@@ -368,6 +368,9 @@ function registerIpc(): void {
     if (typeof id !== 'string' || !input || typeof input.title !== 'string' || !input.title.trim() || input.title.trim().length > 200) throw new Error('游戏原名无效');
     if (typeof input.chineseTitle !== 'string' || input.chineseTitle.trim().length > 200) throw new Error('中文名称无效');
     if (typeof input.wishlist !== 'boolean' || typeof input.hideInSafeView !== 'boolean') throw new Error('游戏设置无效');
+    if (!Array.isArray(input.tags) || input.tags.length > 30 || input.tags.some((tag) => typeof tag !== 'string')) throw new Error('游戏标签无效');
+    input.tags = normalizeTags(input.tags);
+    if (input.tags.some((tag) => tag.length > 40)) throw new Error('游戏标签无效');
     if (input.coverSourcePath != null && (typeof input.coverSourcePath !== 'string' || !path.isAbsolute(input.coverSourcePath))) throw new Error('封面路径无效');
     if (input.backgroundSourcePath != null && (typeof input.backgroundSourcePath !== 'string' || !path.isAbsolute(input.backgroundSourcePath))) throw new Error('背景图路径无效');
     if (!requireStore().getGame(id)) throw new Error('找不到这个游戏');

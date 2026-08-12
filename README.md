@@ -16,7 +16,7 @@
 ---
 
 <div align="center">
-  <img src="docs/preview.png" width="960" alt="GameShelf 1.0 Mod 与存档界面" />
+  <img src="docs/preview.png" width="960" alt="GameShelf 1.1 资料与外观界面" />
 </div>
 
 ---
@@ -29,11 +29,13 @@ GameShelf 是一款面向 Windows 本地游戏的桌面管理器。它不区分�
 
 | 整理 | 游玩 | 隐私 |
 | --- | --- | --- |
-| 批量扫描审核、封面墙/信息列表、搜索、状态与自定义分类 | 默认启动项与原版、汉化版、补丁版等多启动项 | 敏感游戏可在安全视图中完全隐藏 |
+| 批量扫描审核、封面墙/信息列表、搜索、自定义分类与标签筛选 | 默认启动项与原版、汉化版、补丁版等多启动项 | 敏感游戏可在安全视图中完全隐藏 |
 | 原名与中文名独立保存、全局切换 | 自动记录启动次数、最近游玩与游玩时长 | 数据库、图片和记录默认只保存在本机 |
 | 缺失封面检查、批量状态/分类/合集/隐私整理 | 游戏设置中直接打开所在文件夹 | 移出游戏库不会删除游戏本体或存档 |
 
 1.0.0 汇总了 0.3/0.4 已验证的游戏库、Package、存档与安全视图能力，并提供可持续构建的 Windows 安装版和便携版。详见 [变更记录](CHANGELOG.md)、[安装、升级与便携使用](docs/INSTALLATION.md) 和 [Package 与存档安全](docs/PACKAGES-AND-SAVES.md)。
+
+1.1.0 新增可编辑标签、按标签筛选与搜索，并修正横向背景图的误触行为。
 
 ## GameShelf 的设计方向
 
@@ -51,6 +53,7 @@ GameShelf 是一款面向 Windows 本地游戏的桌面管理器。它不区分�
 - [x] 深色 / 浅色外观
 - [x] 中文名 / 原名双标题
 - [x] 自定义分类与系列合集
+- [x] 可编辑标签、标签筛选与标签搜索
 - [x] 多启动项与游玩统计
 - [x] 批量扫描审核、重复/多版本提示与批量整理
 - [x] 封面墙和信息列表、缺失封面检查
@@ -107,5 +110,5 @@ GameShelf 从 [PotatoVN](https://github.com/GoldenPotato137/PotatoVN)、[LunaBox
 ---
 
 <div align="center">
-  <sub>GameShelf 1.0 · Built for a private local library</sub>
+  <sub>GameShelf 1.1 · Built for a private local library</sub>
 </div>

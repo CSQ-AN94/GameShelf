@@ -16,6 +16,10 @@ _Avoid_: treating R18 as a game type
 The maturity classification of a Game or Play Profile, independent of Game Type. A Play Profile inherits its Game's rating unless its selected Packages change the effective rating; R18 is a Content Rating.
 _Avoid_: Genre
 
+**Tag**:
+A user-defined reusable label for organizing and finding Games, independent of Game Type and Content Rating.
+_Avoid_: Genre, Content Rating
+
 **Launch Target**:
 An executable, link, or trusted script that can start a Game, including its arguments and working directory.
 _Avoid_: Version, Start Method

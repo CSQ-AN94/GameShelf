@@ -49,6 +49,7 @@ describe('database safety', () => {
       assert.equal(store.getSchemaVersion(), DATABASE_SCHEMA_VERSION);
       assert.equal(store.getGame('legacy')?.title, 'Legacy Game');
       assert.equal(store.getGame('legacy')?.category, 'Galgame');
+      assert.deepEqual(store.getGame('legacy')?.tags, []);
       assert.equal(store.getGame('legacy')?.launchProfiles.length, 1);
     } finally {
       store.close();

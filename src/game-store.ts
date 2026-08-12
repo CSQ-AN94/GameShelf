@@ -1,9 +1,9 @@
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
-import type { BatchImportInput, BulkEditGamesInput, Game, GameCollection, GamePackage, GameSettingsInput, GameStatus, LaunchProfile, LaunchProfileInput, NewGameInput, PackageChange, PackageKind, SaveBranch, SaveLocation, SaveSnapshot } from './shared';
+import { normalizeTags, type BatchImportInput, type BulkEditGamesInput, type Game, type GameCollection, type GamePackage, type GameSettingsInput, type GameStatus, type LaunchProfile, type LaunchProfileInput, type NewGameInput, type PackageChange, type PackageKind, type SaveBranch, type SaveLocation, type SaveSnapshot } from './shared.ts';
 
-export const DATABASE_SCHEMA_VERSION = 2;
+export const DATABASE_SCHEMA_VERSION = 3;
 
 export interface DatabaseInspection {
   valid: boolean;
@@ -63,6 +63,7 @@ type GameRow = {
   languages_json: string;
   score: number | null;
   description: string;
+  tags_json: string;
   status: Game['status'];
   wishlist: number;
   hide_in_safe_view: number;
@@ -112,6 +113,7 @@ function rowToGame(row: GameRow, launchProfiles: LaunchProfile[]): Game {
     languages: JSON.parse(row.languages_json) as string[],
     score: row.score,
     description: row.description,
+    tags: JSON.parse(row.tags_json) as string[],
     status: row.status,
     wishlist: Boolean(row.wishlist),
     hideInSafeView: Boolean(row.hide_in_safe_view),
@@ -175,6 +177,7 @@ export class GameStore {
         languages_json TEXT NOT NULL DEFAULT '[]',
         score REAL,
         description TEXT NOT NULL DEFAULT '',
+        tags_json TEXT NOT NULL DEFAULT '[]',
         status TEXT NOT NULL DEFAULT 'unplayed',
         wishlist INTEGER NOT NULL DEFAULT 0,
         hide_in_safe_view INTEGER NOT NULL DEFAULT 0,
@@ -299,6 +302,9 @@ export class GameStore {
       this.database.exec('ALTER TABLE games ADD COLUMN hide_in_safe_view INTEGER NOT NULL DEFAULT 0');
       this.database.exec("UPDATE games SET hide_in_safe_view = 1 WHERE content_rating = 'r18'");
     }
+    if (!gameColumns.some((column) => column.name === 'tags_json')) {
+      this.database.exec("ALTER TABLE games ADD COLUMN tags_json TEXT NOT NULL DEFAULT '[]'");
+    }
     const collectionGameColumns = this.database.prepare('PRAGMA table_info(collection_games)').all() as { name: string }[];
     if (!collectionGameColumns.some((column) => column.name === 'position')) {
       this.database.exec('ALTER TABLE collection_games ADD COLUMN position INTEGER NOT NULL DEFAULT 0');
@@ -366,8 +372,8 @@ export class GameStore {
       .prepare(`
         INSERT INTO games (
           id, title, chinese_title, type, category, content_rating, executable_path, working_directory,
-          launch_arguments, cover_path, developer, description, status, wishlist, hide_in_safe_view, completed_at, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          launch_arguments, cover_path, developer, description, tags_json, status, wishlist, hide_in_safe_view, completed_at, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `)
       .run(
         id,
@@ -382,6 +388,7 @@ export class GameStore {
         coverPath,
         input.developer?.trim() ?? '',
         input.description?.trim() ?? '',
+        '[]',
         input.status ?? 'unplayed',
         input.wishlist ? 1 : 0,
         (input.hideInSafeView ?? input.contentRating === 'r18') ? 1 : 0,
@@ -486,11 +493,12 @@ export class GameStore {
   }
 
   setGameSettings(id: string, input: GameSettingsInput): Game {
-    this.database.prepare('UPDATE games SET title = ?, chinese_title = ?, wishlist = ?, hide_in_safe_view = ?, updated_at = ? WHERE id = ?').run(
+    this.database.prepare('UPDATE games SET title = ?, chinese_title = ?, wishlist = ?, hide_in_safe_view = ?, tags_json = ?, updated_at = ? WHERE id = ?').run(
       input.title.trim(),
       input.chineseTitle.trim(),
       input.wishlist ? 1 : 0,
       input.hideInSafeView ? 1 : 0,
+      JSON.stringify(normalizeTags(input.tags)),
       new Date().toISOString(),
       id
     );
